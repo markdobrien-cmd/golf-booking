@@ -18,12 +18,16 @@ The email and password you signed up with are the **root user**. Use it only to 
 1. Sign in as root, turn on MFA for it (IAM > Security credentials).
 2. Open **IAM Identity Center**, enable it, and create a user for yourself.
 3. Create a permission set from the **AdministratorAccess** policy and assign it to your user for this account.
-4. Install the tools (macOS shown; other systems have equivalents):
+4. Install the tools (Terraform 1.10 or later):
 
    ```sh
-   brew install awscli
-   brew install hashicorp/tap/terraform   # needs 1.10 or later
+   # Windows (then open a new PowerShell window)
+   winget install Git.Git Hashicorp.Terraform Amazon.AWSCLI
+   # macOS
+   brew install awscli hashicorp/tap/terraform
    ```
+
+   None of this needs an Administrator shell.
 
 5. Log in from the terminal. Use the start URL from the Identity Center dashboard, region `eu-west-1`, and call the profile `golf`:
 
@@ -33,6 +37,8 @@ The email and password you signed up with are the **root user**. Use it only to 
    export AWS_PROFILE=golf
    aws sts get-caller-identity   # should show your Identity Center user, not root
    ```
+
+On Windows PowerShell, use `$env:AWS_PROFILE = "golf"` instead of `export`.
 
 ## Step 1: create the bootstrap resources (local state)
 
@@ -56,6 +62,8 @@ terraform init -migrate-state -backend-config=backend.hcl   # answer "yes"
 rm terraform.tfstate terraform.tfstate.backup               # the S3 copy is now the real one
 terraform plan                                              # "No changes" proves the migration worked
 ```
+
+On Windows PowerShell, write the backend file with `terraform output -raw backend_config | Out-File -Encoding ascii backend.hcl` (a plain `>` writes UTF-16, which Terraform can't parse), and delete the local state with `rm terraform.tfstate, terraform.tfstate.backup`.
 
 ## Step 3: commit
 
