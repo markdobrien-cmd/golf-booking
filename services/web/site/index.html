@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tee Time Booking</title>
+  <style>
+    :root { --ink: #1d2a1f; --muted: #5d6b60; --line: #d6ddd7; --accent: #2f6b3a; --bg: #f7f9f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    p.lead { color: var(--muted); margin: 0 0 24px; }
+    label { display: block; font-weight: 600; margin: 16px 0 4px; }
+    select, input, button { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; width: 100%; background: #fff; }
+    .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
+    .slot { cursor: pointer; text-align: center; }
+    .slot[aria-pressed="true"] { border-color: var(--accent); background: #e6f0e8; }
+    .slot:disabled { color: #a0a8a2; cursor: not-allowed; }
+    .slot small { display: block; color: var(--muted); }
+    button.primary { background: var(--accent); color: #fff; border: none; margin-top: 20px; cursor: pointer; }
+    #message { margin-top: 16px; padding: 12px; border-radius: 6px; display: none; }
+    #message.ok { display: block; background: #e6f0e8; }
+    #message.error { display: block; background: #fbe9e7; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Book a tee time</h1>
+  <p class="lead">Pick a course and a day, choose a slot, and you're on the tee sheet.</p>
+
+  <label for="course">Course</label>
+  <select id="course"></select>
+
+  <label for="date">Date</label>
+  <input id="date" type="date">
+
+  <label>Tee time</label>
+  <div id="slots" class="slots"></div>
+
+  <form id="book">
+    <label for="players">Players</label>
+    <select id="players"><option>1</option><option selected>2</option><option>3</option><option>4</option></select>
+    <label for="name">Name</label>
+    <input id="name" required maxlength="100">
+    <label for="email">Email</label>
+    <input id="email" type="email" required>
+    <button class="primary" type="submit">Book</button>
+  </form>
+  <div id="message" role="status"></div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let chosen = null;
+
+  function show(text, kind) { const m = $("message"); m.textContent = text; m.className = kind; }
+
+  async function api(path, options) {
+    const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`);
+    return body;
+  }
+
+  async function loadSlots() {
+    chosen = null;
+    const slots = await api(`/api/bookings/availability?course_id=${$("course").value}&date=${$("date").value}`);
+    $("slots").replaceChildren(...slots.map((s) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "slot"; b.disabled = s.remaining === 0;
+      b.setAttribute("aria-pressed", "false");
+      b.innerHTML = `${s.time}<small>${s.remaining} left</small>`;
+      b.onclick = () => {
+        document.querySelectorAll(".slot").forEach((x) => x.setAttribute("aria-pressed", "false"));
+        b.setAttribute("aria-pressed", "true"); chosen = s.time;
+      };
+      return b;
+    }));
+  }
+
+  async function init() {
+    const courses = await api("/api/courses");
+    $("course").replaceChildren(...courses.map((c) => new Option(`${c.name} (${c.holes} holes)`, c.id)));
+    const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+    $("date").value = tomorrow; $("date").min = new Date().toISOString().slice(0, 10);
+    $("course").onchange = $("date").onchange = () => loadSlots().catch((e) => show(e.message, "error"));
+    await loadSlots();
+  }
+
+  $("book").onsubmit = async (e) => {
+    e.preventDefault();
+    if (!chosen) return show("Choose a tee time first.", "error");
+    try {
+      const b = await api("/api/bookings", { method: "POST", body: JSON.stringify({
+        course_id: Number($("course").value), date: $("date").value, time: chosen,
+        players: Number($("players").value), name: $("name").value, email: $("email").value,
+      }) });
+      show(`Booked: ${b.tee_date} at ${b.tee_time.slice(0, 5)}. Reference ${b.id}.`, "ok");
+      await loadSlots();
+    } catch (err) { show(err.message, "error"); }
+  };
+
+  init().catch((e) => show(`Could not load courses: ${e.message}`, "error"));
+</script>
+</body>
+</html>
