@@ -9,7 +9,8 @@ GitHub Actions + Argo CD for DevOps interviews. Help him understand, not just fi
 - Keep changes small and on a feature branch; `main` only changes through pull requests.
 
 ## Safety
-- Never run `terraform apply`, `terraform destroy`, or anything else that changes AWS. Mark runs those himself.
+- Never run `terraform apply`, `terraform destroy`, or anything else that changes AWS. Mark runs those himself
+  (`.claude/settings.json` also blocks the main Terraform commands that change infrastructure or state).
   `terraform fmt`, `validate`, `plan` and `test` are fine.
 - AWS access is via the SSO profile `golf` (`export AWS_PROFILE=golf`, `aws sso login`). Never write credentials to files.
 - Never commit `terraform.tfvars`, `backend.hcl`, state files or account-specific values.
