@@ -56,8 +56,8 @@ terraform apply
 ## Step 2: move the state into S3
 
 ```sh
-mv backend.tf.example backend.tf
-terraform output -raw backend_config > backend.hcl
+terraform output -raw backend_config > backend.hcl          # read the bucket details while state is still local
+mv backend.tf.example backend.tf                            # only now switch the backend to S3
 terraform init -migrate-state -backend-config=backend.hcl   # answer "yes"
 rm terraform.tfstate terraform.tfstate.backup               # the S3 copy is now the real one
 terraform plan                                              # "No changes" proves the migration worked
