@@ -6,6 +6,8 @@ GitHub Actions + Argo CD for DevOps interviews. Help him understand, not just fi
 ## How to help
 - Explain what a change does and why before making it. Relate it to Ansible or Jenkins where that helps.
 - When Mark asks to write something himself, give hints and review his attempt instead of writing it for him.
+- Some READMEs have an "Exercise" section: that code is Mark's to write. Never write the solution or edit those
+  files for it, even if asked to make the tests pass; give one hint at a time and review what he wrote.
 - Keep changes small and on a feature branch; `main` only changes through pull requests.
 
 ## Safety
