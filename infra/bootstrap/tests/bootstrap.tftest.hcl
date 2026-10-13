@@ -56,4 +56,9 @@ run "ci_roles_are_scoped_to_the_repository" {
     condition     = output.github_role_subjects["terraform-plan"] == ["repo:markdobrien-cmd/golf-booking:pull_request"]
     error_message = "The plan role should be limited to pull requests in golf-booking."
   }
+
+  assert {
+    condition     = output.github_role_subjects["env-destroy"] == ["repo:markdobrien-cmd/golf-booking:environment:dev-teardown"]
+    error_message = "The teardown role should only trust jobs in the dev-teardown environment."
+  }
 }

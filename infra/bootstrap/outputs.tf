@@ -29,6 +29,11 @@ output "github_terraform_plan_role_arn" {
   value       = aws_iam_role.terraform_plan.arn
 }
 
+output "github_env_destroy_role_arn" {
+  description = "Role the nightly teardown workflow assumes to destroy infra/envs/dev."
+  value       = aws_iam_role.env_destroy.arn
+}
+
 output "github_role_subjects" {
   description = "GitHub token subjects each CI role trusts."
   value       = local.github_subjects
