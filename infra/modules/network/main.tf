@@ -6,6 +6,9 @@ data "aws_availability_zones" "available" {
 
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
+  # Public subnets are small /24s taken from the top of the VPC range (10.0.240.0 upwards),
+  # leaving everything between them and the private subnets free for later.
+  public_subnet_offset = 240
 }
 
 resource "aws_vpc" "this" {
@@ -26,8 +29,32 @@ resource "aws_internet_gateway" "this" {
 
 # --- Subnets: written by Mark, see the exercise in README.md ---
 
+resource "aws_subnet" "public" {
+  count = var.az_count
 
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = cidrsubnet(var.cidr, 8, local.public_subnet_offset + count.index)
+  availability_zone       = local.azs[count.index]
+  map_public_ip_on_launch = true
 
+  tags = {
+    Name                     = "${var.name}-public-${count.index}"
+    "kubernetes.io/role/elb" = "1"
+  }
+}
+
+resource "aws_subnet" "private" {
+  count = var.az_count
+
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = cidrsubnet(var.cidr, 3, count.index)
+  availability_zone = local.azs[count.index]
+
+  tags = {
+    Name                              = "${var.name}-private-${count.index}"
+    "kubernetes.io/role/internal-elb" = "1"
+  }
+}
 # --- NAT: lets private subnets reach out (to pull images, call AWS APIs) without letting anything in ---
 
 # One NAT gateway, in the first public subnet. One per zone would survive a zone outage,
