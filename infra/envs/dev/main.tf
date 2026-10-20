@@ -4,7 +4,12 @@ locals {
 
 # --- Network: written by Mark, see the exercise in README.md ---
 
-
+module "network" {
+  source = "../../modules/network"
+  name = local.name
+  cidr = "10.0.0.0/16"
+  az_count = 2
+}
 
 # --- EKS cluster ---
 # The community module wraps about 30 resources: the cluster, its IAM roles, security groups,
