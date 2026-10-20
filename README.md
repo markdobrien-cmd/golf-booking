@@ -53,10 +53,11 @@ local/              # Postgres init script and ElasticMQ queue config for Compos
 infra/bootstrap/    # Terraform: state bucket, ECR, GitHub OIDC, budgets (permanent, cheap)
 infra/modules/      # reusable Terraform modules (network)
 infra/envs/dev/     # destroyable environment: network + EKS
+.github/workflows/  # nightly teardown of the dev environment (cost brake)
 docs/adr/           # decision records: why things are the way they are
 ```
 
-The Helm chart (`charts/`) and CI workflows (`.github/workflows/`) arrive in later phases.
+The Helm chart (`charts/`) and the build and deploy workflows arrive in later phases.
 
 ## Roadmap
 
@@ -79,3 +80,4 @@ The Helm chart (`charts/`) and CI workflows (`.github/workflows/`) arrive in lat
 - [ADR 0003: Publish booking events after commit](docs/adr/0003-publish-after-commit.md)
 - [ADR 0004: Two Terraform layers, with state in S3](docs/adr/0004-terraform-layers-and-state.md)
 - [ADR 0005: EKS cluster and network layout](docs/adr/0005-eks-and-network-layout.md)
+- [ADR 0006: Nightly teardown as the cost brake](docs/adr/0006-nightly-teardown.md)

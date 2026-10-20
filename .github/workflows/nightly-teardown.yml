@@ -1,0 +1,64 @@
+# Cost brake: every night, destroy the dev environment if anything is still running.
+# The bootstrap layer (state bucket, ECR, roles, budgets) is never touched.
+name: Nightly dev teardown
+
+on:
+  schedule:
+    - cron: "0 22 * * *" # 22:00 UTC, i.e. 23:00 in Irish summer time, 22:00 in winter
+  workflow_dispatch: # lets you run it by hand from the Actions tab or `gh workflow run`
+
+# Never run two teardowns at once.
+concurrency:
+  group: dev-teardown
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # needed to request the OIDC token that AWS exchanges for credentials
+  contents: read
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    # The AWS role only trusts jobs in this GitHub environment.
+    environment: dev-teardown
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: infra/envs/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the dev environment exists in this commit
+        id: env
+        working-directory: .
+        run: |
+          if [ -d infra/envs/dev ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "No infra/envs/dev yet; nothing to do."; fi
+
+      - name: Log in to AWS with OIDC (no stored keys)
+        if: steps.env.outputs.present == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ENV_DESTROY_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.env.outputs.present == 'true'
+        with:
+          terraform_version: 1.16.5
+
+      - name: Connect to the dev state
+        if: steps.env.outputs.present == 'true'
+        run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Check whether anything is running
+        if: steps.env.outputs.present == 'true'
+        id: state
+        run: |
+          count=$(terraform state list | wc -l)
+          echo "Resources in state: $count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Destroy
+        if: steps.env.outputs.present == 'true' && steps.state.outputs.count != '0'
+        run: terraform destroy -auto-approve -input=false
