@@ -51,19 +51,21 @@ services/
   web/  courses-api/  bookings-api/  notifications-worker/
 local/              # Postgres init script and ElasticMQ queue config for Compose
 infra/bootstrap/    # Terraform: state bucket, ECR, GitHub OIDC, budgets (permanent, cheap)
+infra/modules/      # reusable Terraform modules (network)
+infra/envs/dev/     # destroyable environment: network + EKS
 .github/workflows/  # nightly teardown of the dev environment (cost brake)
 docs/adr/           # decision records: why things are the way they are
 ```
 
-The per-session environment (`infra/envs/`), the Helm chart (`charts/`) and CI workflows (`.github/workflows/`) arrive in later phases.
+The Helm chart (`charts/`) and the build and deploy workflows arrive in later phases.
 
 ## Roadmap
 
 | Phase | Focus | Status |
 | --- | --- | --- |
 | 0 | Local app, Docker Compose, tests | Done |
-| 1 | Terraform bootstrap: state bucket, ECR, GitHub OIDC, budgets | [In progress](infra/bootstrap/README.md) |
-| 2 | Terraform network, EKS and data modules | |
+| 1 | Terraform bootstrap: state bucket, ECR, GitHub OIDC, budgets | [Done](infra/bootstrap/README.md) |
+| 2 | Terraform network, EKS and data modules | [In progress](infra/envs/dev/README.md) |
 | 3 | Helm chart on a local kind cluster | |
 | 4 | Running on EKS: ALB, Pod Identity, autoscaling | |
 | 5 | GitHub Actions CI | |
@@ -77,4 +79,5 @@ The per-session environment (`infra/envs/`), the Helm chart (`charts/`) and CI w
 - [ADR 0002: A database per service on one Postgres instance](docs/adr/0002-database-per-service.md)
 - [ADR 0003: Publish booking events after commit](docs/adr/0003-publish-after-commit.md)
 - [ADR 0004: Two Terraform layers, with state in S3](docs/adr/0004-terraform-layers-and-state.md)
+- [ADR 0005: EKS cluster and network layout](docs/adr/0005-eks-and-network-layout.md)
 - [ADR 0006: Nightly teardown as the cost brake](docs/adr/0006-nightly-teardown.md)
