@@ -22,6 +22,21 @@ variable "app_repository" {
   default     = "golf-booking"
 }
 
+# GitHub's numeric IDs for the owner and the repository. Newer repositories put them in the OIDC
+# "sub" claim ("immutable subject"), so a deleted repository re-created under the same name can't
+# inherit the roles. They are public: `gh api repos/OWNER/REPO --jq '.owner.id, .id'`.
+variable "github_owner_id" {
+  description = "Numeric ID of the GitHub owner."
+  type        = number
+  default     = 339532401
+}
+
+variable "app_repository_id" {
+  description = "Numeric ID of the app repository."
+  type        = number
+  default     = 1410036578
+}
+
 variable "services" {
   description = "One ECR repository is created per service image."
   type        = set(string)

@@ -6,7 +6,9 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 locals {
-  repo = "${var.github_owner}/${var.app_repository}"
+  # Immutable subject format: "owner@owner_id/repo@repo_id" (see variables.tf). Check what your
+  # repository sends with: gh api repos/OWNER/REPO/actions/oidc/customization/sub
+  repo = "${var.github_owner}@${var.github_owner_id}/${var.app_repository}@${var.app_repository_id}"
 
   # Which GitHub token subjects ("sub" claims) may assume each role.
   github_subjects = {

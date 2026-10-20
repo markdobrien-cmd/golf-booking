@@ -28,3 +28,9 @@ A scheduled GitHub Actions workflow (`.github/workflows/nightly-teardown.yml`) r
 - The role can do almost anything outside IAM. That's acceptable for a personal demo account; a team
   would scope it per service or run teardown from a separate tooling account.
 - Work left running overnight is lost, by design. The environment rebuilds from code in about 15 minutes.
+
+## Follow-up (2026-10-20)
+
+The first manual run failed with "Not authorized to perform sts:AssumeRoleWithWebIdentity". This
+repository uses GitHub's immutable OIDC subject, `repo:owner@owner_id/repo@repo_id:...`, so the
+name-only subject in the trust policies never matched. All three roles now trust the immutable form.
