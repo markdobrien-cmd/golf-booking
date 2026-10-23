@@ -58,6 +58,13 @@ module "eks" {
       desired_size = 1
 
       labels = { role = "system" }
+      taints = {
+        system_only = {
+          key    = "CriticalAddonsOnly"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      }
     }
 
     # The golf services: Spot is far cheaper and they run as 2+ stateless copies.
