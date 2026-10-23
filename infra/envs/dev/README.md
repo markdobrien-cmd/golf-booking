@@ -3,8 +3,9 @@
 The destroyable layer: the network (your module) plus the EKS cluster. Aurora and SQS come next.
 See [ADR 0005](../../../docs/adr/0005-eks-and-network-layout.md) for the reasoning.
 
-> **Don't apply this yet.** Once up, the cluster costs roughly $0.30 an hour. The nightly
-> auto-destroy and spending brake land in the next pull request; apply after that.
+> **Cost:** about $0.25 an hour while it's up (EKS control plane, NAT gateway, three small nodes).
+> The [nightly teardown](../../../.github/workflows/nightly-teardown.yml) destroys it at 22:00 UTC
+> if you forget.
 
 ## Exercise: call the network module
 
@@ -36,15 +37,17 @@ Open `infra/modules/network/variables.tf`: any variable without a `default` is r
 There's a `local` in `main.tf` that already holds the name you want.
 </details>
 
-## Running it for real (after the cost-brake PR)
+## Running it for real
+
+Needs `kubectl` as well as Terraform and the AWS CLI.
 
 ```bash
 export AWS_PROFILE=golf
 aws sso login
 cd infra/envs/dev
 terraform init -backend-config="bucket=$(terraform -chdir=../../bootstrap output -raw state_bucket)"
-terraform plan
-terraform apply     # about 15 minutes; EKS is slow to create
+terraform plan -out=dev.tfplan   # read it: everything should be "+" (create)
+terraform apply dev.tfplan       # 15-20 minutes; EKS is slow to create
 $(terraform output -raw configure_kubectl)
 kubectl get nodes
 terraform destroy   # when you're done for the day

@@ -10,3 +10,6 @@ __pycache__/
 *.tfstate.*
 terraform.tfvars
 backend.hcl
+# Saved plans can hold sensitive values; keep them local
+*.tfplan
+plan.txt
