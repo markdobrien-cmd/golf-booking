@@ -50,7 +50,7 @@ module "eks" {
   # This block allows unrestricted traffic between all nodes in the cluster,
   # which is required for Kubernetes networking but may increase lateral movement risk if a node is compromised.
   node_security_group_additional_rules = {
-       # Allow all traffic between nodes
+    # Allow all traffic between nodes
     ingress_self_all = {
       description = "Node to node all ports/protocols"
       protocol    = "-1"
