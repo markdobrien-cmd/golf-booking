@@ -46,6 +46,20 @@ module "eks" {
     coredns    = {}
   }
 
+  # Additional security group rules for EKS worker nodes.
+  # This block allows unrestricted traffic between all nodes in the cluster,
+  # which is required for Kubernetes networking but may increase lateral movement risk if a node is compromised.
+  node_security_group_additional_rules = {
+       # Allow all traffic between nodes
+    ingress_self_all = {
+      description = "Node to node all ports/protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      self        = true
+    }
+  }
+
   eks_managed_node_groups = {
     # Cluster-critical add-ons (DNS, load balancer controller, Argo CD): on-demand so they never vanish.
     system = {
