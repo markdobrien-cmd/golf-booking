@@ -53,11 +53,11 @@ local/              # Postgres init script and ElasticMQ queue config for Compos
 infra/bootstrap/    # Terraform: state bucket, ECR, GitHub OIDC, budgets (permanent, cheap)
 infra/modules/      # reusable Terraform modules (network)
 infra/envs/dev/     # destroyable environment: network + EKS
-.github/workflows/  # nightly teardown of the dev environment (cost brake)
+.github/workflows/  # CI (test, build, publish images) and the nightly dev teardown
 docs/adr/           # decision records: why things are the way they are
 ```
 
-The Helm chart (`charts/`) and the build and deploy workflows arrive in later phases.
+The Helm chart (`charts/`) and the deploy workflow arrive in later phases.
 
 ## Roadmap
 
@@ -68,7 +68,7 @@ The Helm chart (`charts/`) and the build and deploy workflows arrive in later ph
 | 2 | Terraform network, EKS and data modules | [In progress](infra/envs/dev/README.md) |
 | 3 | Helm chart on a local kind cluster | |
 | 4 | Running on EKS: ALB, Pod Identity, autoscaling | |
-| 5 | GitHub Actions CI | |
+| 5 | GitHub Actions CI | [In progress](.github/workflows/README.md) |
 | 6 | Argo CD GitOps | |
 | 7 | Hardening (Karpenter, observability, canaries, policy) | |
 | 8 | Portfolio polish | |
@@ -81,3 +81,4 @@ The Helm chart (`charts/`) and the build and deploy workflows arrive in later ph
 - [ADR 0004: Two Terraform layers, with state in S3](docs/adr/0004-terraform-layers-and-state.md)
 - [ADR 0005: EKS cluster and network layout](docs/adr/0005-eks-and-network-layout.md)
 - [ADR 0006: Nightly teardown as the cost brake](docs/adr/0006-nightly-teardown.md)
+- [ADR 0007: CI builds every service and publishes images tagged with the commit SHA](docs/adr/0007-ci-pipeline.md)
