@@ -1,0 +1,72 @@
+# CI: test every service on every pull request; on main, also publish the images to ECR.
+# Images are tagged with the git commit SHA, so a tag always points to exactly one commit.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch or PR cancels the run that is still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false # one broken service shouldn't hide the results of the others
+      matrix:
+        service: [courses-api, bookings-api, notifications-worker]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12" # the same version as the Dockerfiles
+          cache: pip
+          cache-dependency-path: services/${{ matrix.service }}/requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Unit tests
+        run: pytest -q
+
+  build:
+    name: Build ${{ matrix.service }}
+    needs: test # never publish an image whose tests failed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [web, courses-api, bookings-api, notifications-worker]
+    env:
+      # ECR repository name, as created in infra/bootstrap/ecr.tf.
+      IMAGE_NAME: golf-booking/${{ matrix.service }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # Building on pull requests too proves the Dockerfile still works before anything is merged.
+      - name: Build the image
+        run: docker build -t "$IMAGE_NAME:${{ github.sha }}" services/${{ matrix.service }}
+
+      # --- Exercise: publish the image (see .github/workflows/README.md) ---
+      # Only on a push to main: log in to AWS with OIDC, log in to ECR, then tag and push the image.
