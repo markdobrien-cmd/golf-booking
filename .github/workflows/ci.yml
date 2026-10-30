@@ -70,3 +70,20 @@ jobs:
 
       # --- Exercise: publish the image (see .github/workflows/README.md) ---
       # Only on a push to main: log in to AWS with OIDC, log in to ECR, then tag and push the image.
+      - name: Log in to AWS with OIDC (no stored keys)
+        if : github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN  }}
+          aws-region: eu-west-1
+      - name: Log in to ECR
+        if : github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN  }}
+          aws-region: eu-west-1
+      - name: Tag and push the image
+        if : github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag "$IMAGE_NAME:${{ github.sha }}" "${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:${{ github.sha }}"
+          docker  push "${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:${{ github.sha }}"
