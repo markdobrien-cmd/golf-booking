@@ -49,6 +49,13 @@ resource "aws_rds_cluster" "mysql" {
   # so you can query this private database without a pod or a VPN.
   enable_http_endpoint = true
 
+  # CloudWatch Database Insights: a ready-made dashboard of load, top SQL and waits per database.
+  # "standard" is free; "advanced" adds per-query history, execution plans and lock analysis,
+  # and needs Performance Insights kept for 465 days (15 months). Charged per ACU-hour.
+  database_insights_mode                = "advanced"
+  performance_insights_enabled          = true
+  performance_insights_retention_period = 465
+
   serverlessv2_scaling_configuration {
     # 0 ACUs: the instance pauses after `seconds_until_auto_pause` idle and costs only storage.
     # The first query after a pause waits ~15 seconds while it resumes.

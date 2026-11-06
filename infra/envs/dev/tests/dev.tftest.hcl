@@ -62,6 +62,11 @@ run "aurora_mysql_is_private_and_serverless" {
   }
 
   assert {
+    condition     = aws_rds_cluster.mysql.database_insights_mode == "advanced" && aws_rds_cluster.mysql.performance_insights_retention_period == 465
+    error_message = "Advanced Database Insights needs Performance Insights with 465 days of retention."
+  }
+
+  assert {
     condition     = aws_vpc_security_group_ingress_rule.mysql_from_nodes.referenced_security_group_id == "sg-0nodes" && aws_vpc_security_group_ingress_rule.mysql_from_nodes.from_port == 3306
     error_message = "Only the EKS nodes should reach MySQL on port 3306."
   }
