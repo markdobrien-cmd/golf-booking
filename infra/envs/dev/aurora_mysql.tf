@@ -80,3 +80,14 @@ resource "aws_rds_cluster_instance" "mysql" {
 
   publicly_accessible = false
 }
+
+resource "aws_rds_cluster_instance" "mysql_reader" {
+  identifier         = "${local.name}-mysql-2"
+  cluster_identifier = aws_rds_cluster.mysql.id
+  instance_class     = "db.serverless"
+  # Must match the cluster, so read them from it rather than repeat them.
+  engine         = aws_rds_cluster.mysql.engine
+  engine_version = aws_rds_cluster.mysql.engine_version
+  promotion_tier = 0
+  publicly_accessible = false
+}
