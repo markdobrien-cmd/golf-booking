@@ -1,6 +1,7 @@
 # Dev environment
 
-The destroyable layer: the network (your module) plus the EKS cluster. Aurora and SQS come next.
+The destroyable layer: the network (your module), the EKS cluster and an Aurora MySQL learning
+cluster ([ADR 0008](../../../docs/adr/0008-aurora-mysql-serverless.md)). Aurora PostgreSQL and SQS come next.
 See [ADR 0005](../../../docs/adr/0005-eks-and-network-layout.md) for the reasoning.
 
 > **Cost:** about $0.25 an hour while it's up (EKS control plane, NAT gateway, three small nodes).
@@ -55,3 +56,18 @@ terraform destroy   # when you're done for the day
 
 `terraform -chdir=../../bootstrap output -raw state_bucket` reads the bucket name from the bootstrap
 layer's state, so no account-specific value is written into this folder.
+
+## Trying the Aurora MySQL cluster
+
+The database is private, so connect from a throwaway pod inside the cluster. The password is in
+Secrets Manager; nothing is stored on disk.
+
+```bash
+SECRET=$(aws secretsmanager get-secret-value --secret-id "$(terraform output -raw mysql_secret_arn)" \
+  --query SecretString --output text)
+kubectl run mysql-client --rm -it --restart=Never --image=mysql:8.0 \
+  --env MYSQL_PWD="$(echo "$SECRET" | jq -r .password)" -- \
+  mysql -h "$(terraform output -raw mysql_endpoint)" -u golfadmin golf -e 'SELECT VERSION();'
+```
+
+If the cluster has paused (no connections for 5 minutes), the first query takes about 15 seconds.
