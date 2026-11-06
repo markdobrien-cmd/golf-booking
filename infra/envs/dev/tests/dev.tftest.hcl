@@ -71,3 +71,33 @@ run "aurora_mysql_is_private_and_serverless" {
     error_message = "Only the EKS nodes should reach MySQL on port 3306."
   }
 }
+
+# Exercise (see README.md): add a reader so the cluster can fail over in seconds.
+run "aurora_mysql_has_a_failover_reader" {
+  command = apply
+
+  assert {
+    condition     = aws_rds_cluster_instance.mysql_reader.cluster_identifier == aws_rds_cluster.mysql.id
+    error_message = "The reader must join the existing aws_rds_cluster.mysql cluster."
+  }
+
+  assert {
+    condition     = aws_rds_cluster_instance.mysql_reader.instance_class == "db.serverless"
+    error_message = "The reader should be a Serverless v2 instance, like the writer."
+  }
+
+  assert {
+    condition     = aws_rds_cluster_instance.mysql_reader.identifier != aws_rds_cluster_instance.mysql.identifier
+    error_message = "Each instance needs its own identifier."
+  }
+
+  assert {
+    condition     = aws_rds_cluster_instance.mysql_reader.promotion_tier <= 1
+    error_message = "Use promotion tier 0 or 1 so the reader scales with the writer and is ready to take over."
+  }
+
+  assert {
+    condition     = aws_rds_cluster_instance.mysql_reader.publicly_accessible == false
+    error_message = "The reader must stay private, like the writer."
+  }
+}
