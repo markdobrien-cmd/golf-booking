@@ -27,3 +27,9 @@ variable "api_allowed_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "mysql_engine_version" {
+  description = "Aurora MySQL version. Scaling to 0 ACUs needs 3.08 or later. List versions with: aws rds describe-db-engine-versions --engine aurora-mysql --query 'DBEngineVersions[].EngineVersion'"
+  type        = string
+  default     = "8.0.mysql_aurora.3.10.0"
+}
