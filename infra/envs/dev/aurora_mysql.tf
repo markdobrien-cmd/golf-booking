@@ -45,6 +45,10 @@ resource "aws_rds_cluster" "mysql" {
   vpc_security_group_ids = [aws_security_group.mysql.id]
   storage_encrypted      = true
 
+  # Data API: run SQL over HTTPS with IAM auth (aws rds-data, or the console's Query Editor),
+  # so you can query this private database without a pod or a VPN.
+  enable_http_endpoint = true
+
   serverlessv2_scaling_configuration {
     # 0 ACUs: the instance pauses after `seconds_until_auto_pause` idle and costs only storage.
     # The first query after a pause waits ~15 seconds while it resumes.

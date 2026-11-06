@@ -70,4 +70,14 @@ kubectl run mysql-client --rm -it --restart=Never --image=mysql:8.0 \
   mysql -h "$(terraform output -raw mysql_endpoint)" -u golfadmin golf -e 'SELECT VERSION();'
 ```
 
+Or skip the pod and use the Data API (SQL over HTTPS, checked by IAM). The console's
+RDS **Query editor** uses the same API: pick the cluster, choose "Connect with a Secrets Manager ARN"
+and paste `terraform output -raw mysql_secret_arn`.
+
+```bash
+aws rds-data execute-statement --database golf --sql 'SELECT VERSION();' \
+  --resource-arn "$(aws rds describe-db-clusters --db-cluster-identifier golf-booking-dev-mysql --query 'DBClusters[0].DBClusterArn' --output text)" \
+  --secret-arn "$(terraform output -raw mysql_secret_arn)"
+```
+
 If the cluster has paused (no connections for 5 minutes), the first query takes about 15 seconds.

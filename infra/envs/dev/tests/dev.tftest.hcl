@@ -57,6 +57,11 @@ run "aurora_mysql_is_private_and_serverless" {
   }
 
   assert {
+    condition     = aws_rds_cluster.mysql.enable_http_endpoint
+    error_message = "Enable the Data API so the Query Editor and aws rds-data work."
+  }
+
+  assert {
     condition     = aws_vpc_security_group_ingress_rule.mysql_from_nodes.referenced_security_group_id == "sg-0nodes" && aws_vpc_security_group_ingress_rule.mysql_from_nodes.from_port == 3306
     error_message = "Only the EKS nodes should reach MySQL on port 3306."
   }
