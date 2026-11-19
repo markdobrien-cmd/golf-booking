@@ -8,24 +8,17 @@ output "configure_kubectl" {
   value       = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
 }
 
-output "mysql_endpoint" {
-  description = "Writer endpoint of the Aurora MySQL cluster (reachable only from inside the VPC)."
-  value       = aws_rds_cluster.mysql.endpoint
-}
-
-output "mysql_secret_arn" {
-  description = "Secrets Manager secret holding the MySQL admin username and password."
-  value       = aws_rds_cluster.mysql.master_user_secret[0].secret_arn
-}
-
 output "grafana_admin_password" {
   description = "Grafana login for user admin. Show it with: terraform output -raw grafana_admin_password"
   value       = random_password.grafana_admin.result
   sensitive   = true
 }
 
-output "mysql_exporter_password" {
-  description = "Password for the MySQL 'exporter' user (README, Monitoring). Show it with: terraform output -raw mysql_exporter_password"
-  value       = random_password.mysql_exporter.result
-  sensitive   = true
+output "open_the_app" {
+  description = "Port-forward commands for the app, Grafana and Prometheus (run each in its own terminal)."
+  value       = <<-EOT
+    kubectl -n golf port-forward svc/web 8080:8080                                    # http://localhost:8080
+    kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80       # http://localhost:3000 (admin)
+    kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090  # http://localhost:9090
+  EOT
 }

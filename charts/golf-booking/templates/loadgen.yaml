@@ -1,0 +1,47 @@
+{{- if .Values.loadgen.enabled }}
+# Fake customers. Goes through the web service, like a browser would, so every hop is measured:
+# web -> courses-api, web -> bookings-api -> courses-api, bookings-api -> SQS -> worker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  labels:
+    app.kubernetes.io/name: loadgen
+    {{- include "golf.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: loadgen }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: loadgen, app.kubernetes.io/part-of: golf-booking }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+      containers:
+        - name: loadgen
+          image: curlimages/curl:8.11.1
+          resources: { requests: { cpu: 10m, memory: 16Mi }, limits: { memory: 64Mi } }
+          command: [/bin/sh, -c]
+          args:
+            - |
+              base=http://web:{{ .Values.services.web.port }}
+              n=0
+              while true; do
+                n=$((n + 1))
+                course=$((n % 3 + 1))
+                day=$(date -u -d "@$(( $(date +%s) + 86400 * (n % 7 + 1) ))" +%F 2>/dev/null || date -u +%F)
+                curl -s -o /dev/null "$base/api/courses"
+                curl -s -o /dev/null "$base/api/courses/$course/tee-times?date=$day"
+                curl -s -o /dev/null "$base/api/bookings/availability?course_id=$course&date=$day"
+                # Every 5th round, book a tee time (some will hit "slot full", a 409).
+                if [ $((n % 5)) -eq 0 ]; then
+                  curl -s -o /dev/null -X POST "$base/api/bookings" -H 'Content-Type: application/json' \
+                    -d "{\"course_id\": $course, \"date\": \"$day\", \"time\": \"09:00\", \"players\": 2, \"name\": \"Load Test\", \"email\": \"load@example.com\"}"
+                fi
+                # Every 10th round, ask for a course that doesn't exist (a 404).
+                if [ $((n % 10)) -eq 0 ]; then curl -s -o /dev/null "$base/api/courses/999"; fi
+                sleep {{ .Values.loadgen.intervalSeconds }}
+              done
+{{- end }}

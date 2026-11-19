@@ -28,14 +28,8 @@ variable "api_allowed_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
-variable "mysql_engine_version" {
-  description = "Aurora MySQL version. Scaling to 0 ACUs needs 3.08 or later. List versions with: aws rds describe-db-engine-versions --engine aurora-mysql --query 'DBEngineVersions[].EngineVersion'"
+variable "app_image_tag" {
+  description = "Git commit SHA of the images to run (CI tags each image with its commit). List them with: aws ecr describe-images --repository-name golf-booking/web --query 'imageDetails[].imageTags' --output text"
   type        = string
-  default     = "8.0.mysql_aurora.3.10.0"
-}
-
-variable "enable_mysql_exporter" {
-  description = "Run mysqld_exporter against Aurora MySQL. Create its MySQL user first (README, Monitoring). It stops the cluster auto-pausing while it runs."
-  type        = bool
-  default     = true
+  default     = "ec3ed242f27631af1945272b2c9dc48db426b2e2" # main after PR #13, the first images CI published
 }

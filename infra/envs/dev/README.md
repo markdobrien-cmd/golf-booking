@@ -1,8 +1,8 @@
 # Dev environment
 
-The destroyable layer: the network (your module), the EKS cluster and an Aurora MySQL learning
-cluster ([ADR 0008](../../../docs/adr/0008-aurora-mysql-serverless.md)), monitored with Prometheus and Grafana
-([ADR 0009](../../../docs/adr/0009-prometheus-grafana-monitoring.md)). Aurora PostgreSQL and SQS come next.
+The destroyable layer: the network (your module), the EKS cluster, Prometheus and Grafana, and the
+golf booking app itself ([ADR 0009](../../../docs/adr/0009-prometheus-grafana-monitoring.md)).
+Aurora PostgreSQL and SQS come next; until then the app uses in-cluster stand-ins.
 See [ADR 0005](../../../docs/adr/0005-eks-and-network-layout.md) for the reasoning.
 
 > **Cost:** about $0.25 an hour while it's up (EKS control plane, NAT gateway, three small nodes).
@@ -39,52 +39,6 @@ Open `infra/modules/network/variables.tf`: any variable without a `default` is r
 There's a `local` in `main.tf` that already holds the name you want.
 </details>
 
-## Exercise: add a failover reader
-
-Today the Aurora MySQL cluster has one instance, so the console shows **Multi-AZ: No** and a failed
-writer means about 10 minutes of downtime while Aurora rebuilds it. With a second instance
-(a reader), Aurora promotes it in about 30 seconds instead.
-
-Add a resource named `aws_rds_cluster_instance.mysql_reader` to `aurora_mysql.tf`. The last run in
-`tests/dev.tftest.hcl` checks it. Run it offline as above (`terraform init -backend=false && terraform test`).
-
-<details><summary>1. Where do I start?</summary>
-
-Look at the existing `aws_rds_cluster_instance "mysql"`. A reader is the same kind of resource
-joined to the same cluster. Aurora decides which instance is the writer; you don't mark it.
-</details>
-
-<details><summary>2. Why not just add <code>count = 2</code> to the existing instance?</summary>
-
-`count` changes the resource's address in state from `aws_rds_cluster_instance.mysql` to
-`aws_rds_cluster_instance.mysql[0]`. Terraform then sees the old one as deleted and a new one as
-created, and the plan replaces your writer. Use a separate resource (or a `moved` block if you
-really want `count`).
-</details>
-
-<details><summary>3. What's <code>promotion_tier</code>?</summary>
-
-It ranks readers for failover, from 0 (first choice) to 15. On Serverless v2, readers in tier 0 or 1
-also scale up with the writer, so they're ready to take its load the moment they're promoted.
-</details>
-
-<details><summary>4. Before you apply</summary>
-
-`terraform plan` should show exactly **1 to add, 0 to change, 0 to destroy**. Anything touching the
-writer means something's wrong. After apply, check the Multi-AZ column and each instance's AZ with:
-
-```bash
-aws rds describe-db-clusters --db-cluster-identifier golf-booking-dev-mysql \
-  --query 'DBClusters[0].DBClusterMembers[].[DBInstanceIdentifier,IsClusterWriter]' --output table
-aws rds describe-db-instances --filters Name=db-cluster-id,Values=golf-booking-dev-mysql \
-  --query 'DBInstances[].[DBInstanceIdentifier,AvailabilityZone]' --output table
-```
-
-If both landed in the same AZ, set `availability_zone` on the **reader only** (on the writer it
-forces a replacement). Then try `aws rds failover-db-cluster --db-cluster-identifier golf-booking-dev-mysql`
-and watch the roles swap.
-</details>
-
 ## Running it for real
 
 Needs `kubectl` as well as Terraform and the AWS CLI.
@@ -104,86 +58,44 @@ terraform destroy   # when you're done for the day
 `terraform -chdir=../../bootstrap output -raw state_bucket` reads the bucket name from the bootstrap
 layer's state, so no account-specific value is written into this folder.
 
-## Trying the Aurora MySQL cluster
+## The app and its monitoring
 
-The database is private, so connect from a throwaway pod inside the cluster. The password is in
-Secrets Manager; nothing is stored on disk.
+`apply` also installs two Helm charts:
 
-```bash
-SECRET=$(aws secretsmanager get-secret-value --secret-id "$(terraform output -raw mysql_secret_arn)" \
-  --query SecretString --output text)
-kubectl run mysql-client --rm -it --restart=Never --image=mysql:8.0 \
-  --env MYSQL_PWD="$(echo "$SECRET" | jq -r .password)" -- \
-  mysql -h "$(terraform output -raw mysql_endpoint)" -u golfadmin golf -e 'SELECT VERSION();'
-```
+| Release | Namespace | What it is |
+|---|---|---|
+| `kube-prometheus-stack` (`monitoring.tf`) | `monitoring` | Prometheus, Grafana, Alertmanager, node and Kubernetes metrics |
+| `golf-booking` (`app.tf`, chart in [`charts/golf-booking`](../../../charts/golf-booking)) | `golf` | The four services, dev Postgres and ElasticMQ, a load generator, plus the app's ServiceMonitor, alert rules and dashboard |
 
-Or skip the pod and use the Data API (SQL over HTTPS, checked by IAM). The console's
-RDS **Query editor** uses the same API: pick the cluster, choose "Connect with a Secrets Manager ARN"
-and paste `terraform output -raw mysql_secret_arn`.
+The images come from ECR at the commit in `app_image_tag`. To run a newer build, find its tag
+with the command in that variable's description and pass `-var app_image_tag=<sha>`.
+
+### Look at it
 
 ```bash
-aws rds-data execute-statement --database golf --sql 'SELECT VERSION();' \
-  --resource-arn "$(aws rds describe-db-clusters --db-cluster-identifier golf-booking-dev-mysql --query 'DBClusters[0].DBClusterArn' --output text)" \
-  --secret-arn "$(terraform output -raw mysql_secret_arn)"
+terraform output -raw open_the_app            # the three port-forward commands
+terraform output -raw grafana_admin_password  # Grafana login, user admin
 ```
 
-If the cluster has paused (no connections for 5 minutes), the first query takes about 15 seconds.
+- **The app:** http://localhost:8080, book a tee time.
+- **Grafana:** Dashboards → **Golf booking**. The load generator keeps traffic flowing, so it's
+  never empty. The built-in **Kubernetes / Compute Resources / Namespace (Pods)** dashboard with
+  namespace `golf` shows the same pods from the infrastructure side.
+- **Prometheus:** http://localhost:9090/targets should list `courses-api`, `bookings-api` and
+  `notifications-worker` as UP. **Alerts** lists the golf-booking rules.
 
-## Monitoring: Prometheus and Grafana
-
-`monitoring.tf` installs three Helm charts into the `monitoring` namespace
-([ADR 0009](../../../docs/adr/0009-prometheus-grafana-monitoring.md)):
-
-| Chart | What it gives you |
-|---|---|
-| kube-prometheus-stack | Prometheus, Grafana, Alertmanager, node and Kubernetes metrics, dozens of built-in dashboards |
-| YACE (CloudWatch exporter) | AWS's view of Aurora: ACUs, CPU, connections, latency, replica lag. Uses EKS Pod Identity, no keys |
-| mysqld_exporter | MySQL's own counters: queries by type, buffer pool size and hit ratio, temp tables, lock waits |
-
-### 1. Apply
+### Try breaking it (good for a demo)
 
 ```bash
-terraform plan -out=dev.tfplan && terraform apply dev.tfplan
+kubectl -n golf scale deploy/courses-api --replicas=0   # bookings-api can't reach it: 5xx climb, GolfHighErrorRate fires after 5 min
+kubectl -n golf scale deploy/courses-api --replicas=2   # recovers
+
+kubectl -n golf scale deploy/notifications-worker --replicas=0   # GolfNotificationsStalled after a few minutes
+kubectl -n golf scale deploy/notifications-worker --replicas=1
+
+kubectl -n golf delete pod -l app.kubernetes.io/name=courses-api  # Kubernetes replaces them; with 2 replicas, no errors
 ```
 
-On a fresh cluster this is one apply. If Helm complains it can't reach the cluster, create the
-cluster first with `terraform apply -target=module.eks`, then run the full apply.
-
-### 2. Create the exporter's MySQL user (once per new cluster)
-
-`terraform output -raw mysql_exporter_password` prints the password Terraform generated.
-Paste this into the RDS Query Editor, with the password filled in:
-
-```sql
-CREATE USER IF NOT EXISTS 'exporter'@'%' IDENTIFIED BY '<password>' WITH MAX_USER_CONNECTIONS 3;
-GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.* TO 'exporter'@'%';
-```
-
-Least privilege: it can read status counters, but `MAX_USER_CONNECTIONS` stops it hogging
-connections. Until this exists, `mysql_up` is 0 and the `MySQLExporterDown` alert fires, which
-is itself a nice demo.
-
-### 3. Open Grafana and Prometheus
-
-```bash
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
-# browse to http://localhost:3000, user admin, password: terraform output -raw grafana_admin_password
-
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
-# http://localhost:9090/targets shows every scrape target and whether it's up
-```
-
-The **Golf booking → Aurora MySQL** dashboard has two rows: the AWS view (CloudWatch, about
-5 minutes behind) and the inside-MySQL view (every 30 seconds). Run the load SQL in the Query
-Editor and watch queries climb, then ACUs and the buffer pool size step up a little later.
-
-If a CloudWatch panel stays empty, search `{__name__=~"aws_rds_.*"}` in Prometheus to see the exact
-metric names YACE produced, and adjust the panel.
-
-### Cost and side effects
-
-- The pods run on the existing nodes, so there's no new compute.
-- CloudWatch charges per metric that YACE fetches, a few cents a day for this list.
-- **mysqld_exporter keeps Aurora awake.** It connects every 30 seconds, so the cluster no longer
-  pauses at 0 ACUs (about 0.5 ACU, roughly $0.07 an hour). Set `enable_mysql_exporter = false`
-  to let it pause again.
+The first demo needs images built after this change (`services/*/app/metrics.py` now counts
+crashes as 500s). Before that, crashed requests weren't counted at all, so the error rate stayed
+at 0% while customers saw errors.

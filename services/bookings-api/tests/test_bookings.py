@@ -132,3 +132,18 @@ def test_cancel_frees_the_slot(client):
     booking_id = client.post("/api/bookings", json=booking(players=4)).json()["id"]
     assert client.delete(f"/api/bookings/{booking_id}").json()["status"] == "cancelled"
     assert client.post("/api/bookings", json=booking(players=4)).status_code == 201
+
+
+class BrokenCourses:
+    def tee_sheet(self, course_id, day):
+        raise ConnectionError("courses-api is down")
+
+
+def test_unhandled_errors_are_counted_as_500(publisher):
+    # A crash raises instead of returning a response; the metrics must still record it,
+    # or the error-rate dashboard and alert would show 0% while customers see failures.
+    app = create_app(FakeRepo(), BrokenCourses(), publisher, today=lambda: TODAY)
+    with TestClient(app, raise_server_exceptions=False) as c:
+        assert c.get("/api/bookings/availability", params={"course_id": 1, "date": "2026-10-09"}).status_code == 500
+        metrics = c.get("/metrics").text
+    assert 'route="/api/bookings/availability",status="500"' in metrics

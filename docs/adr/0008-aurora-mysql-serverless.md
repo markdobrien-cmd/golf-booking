@@ -1,6 +1,7 @@
 # 0008: Aurora MySQL Serverless v2 as a learning side-build
 
-**Status:** accepted, 2026-11-06
+**Status:** superseded, 2026-11-19. The cluster was a learning exercise and has been removed;
+the app's database remains Aurora PostgreSQL (ADR 0002). This record stays for the reasoning.
 
 ## Context
 The golf services use PostgreSQL (ADR 0002). Mark wants hands-on experience with Aurora MySQL too,

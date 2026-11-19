@@ -1,0 +1,21 @@
+{{- if .Values.services.web.nginxConfig }}
+# Stands in for the ALB until it exists: serves the site and proxies /api/* to the APIs.
+# Kubernetes Service names have stable IPs, so nginx can resolve them once at startup.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-nginx
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        root /usr/share/nginx/html;
+
+        location = /healthz { access_log off; return 200 "ok\n"; }
+        location /api/courses  { proxy_pass http://courses-api:{{ (index .Values.services "courses-api").port }}; }
+        location /api/bookings { proxy_pass http://bookings-api:{{ (index .Values.services "bookings-api").port }}; }
+        location / { try_files $uri /index.html; }
+    }
+{{- end }}
