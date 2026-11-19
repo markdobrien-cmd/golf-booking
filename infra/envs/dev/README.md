@@ -1,7 +1,8 @@
 # Dev environment
 
 The destroyable layer: the network (your module), the EKS cluster and an Aurora MySQL learning
-cluster ([ADR 0008](../../../docs/adr/0008-aurora-mysql-serverless.md)). Aurora PostgreSQL and SQS come next.
+cluster ([ADR 0008](../../../docs/adr/0008-aurora-mysql-serverless.md)), monitored with Prometheus and Grafana
+([ADR 0009](../../../docs/adr/0009-prometheus-grafana-monitoring.md)). Aurora PostgreSQL and SQS come next.
 See [ADR 0005](../../../docs/adr/0005-eks-and-network-layout.md) for the reasoning.
 
 > **Cost:** about $0.25 an hour while it's up (EKS control plane, NAT gateway, three small nodes).
@@ -127,3 +128,62 @@ aws rds-data execute-statement --database golf --sql 'SELECT VERSION();' \
 ```
 
 If the cluster has paused (no connections for 5 minutes), the first query takes about 15 seconds.
+
+## Monitoring: Prometheus and Grafana
+
+`monitoring.tf` installs three Helm charts into the `monitoring` namespace
+([ADR 0009](../../../docs/adr/0009-prometheus-grafana-monitoring.md)):
+
+| Chart | What it gives you |
+|---|---|
+| kube-prometheus-stack | Prometheus, Grafana, Alertmanager, node and Kubernetes metrics, dozens of built-in dashboards |
+| YACE (CloudWatch exporter) | AWS's view of Aurora: ACUs, CPU, connections, latency, replica lag. Uses EKS Pod Identity, no keys |
+| mysqld_exporter | MySQL's own counters: queries by type, buffer pool size and hit ratio, temp tables, lock waits |
+
+### 1. Apply
+
+```bash
+terraform plan -out=dev.tfplan && terraform apply dev.tfplan
+```
+
+On a fresh cluster this is one apply. If Helm complains it can't reach the cluster, create the
+cluster first with `terraform apply -target=module.eks`, then run the full apply.
+
+### 2. Create the exporter's MySQL user (once per new cluster)
+
+`terraform output -raw mysql_exporter_password` prints the password Terraform generated.
+Paste this into the RDS Query Editor, with the password filled in:
+
+```sql
+CREATE USER IF NOT EXISTS 'exporter'@'%' IDENTIFIED BY '<password>' WITH MAX_USER_CONNECTIONS 3;
+GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.* TO 'exporter'@'%';
+```
+
+Least privilege: it can read status counters, but `MAX_USER_CONNECTIONS` stops it hogging
+connections. Until this exists, `mysql_up` is 0 and the `MySQLExporterDown` alert fires, which
+is itself a nice demo.
+
+### 3. Open Grafana and Prometheus
+
+```bash
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+# browse to http://localhost:3000, user admin, password: terraform output -raw grafana_admin_password
+
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+# http://localhost:9090/targets shows every scrape target and whether it's up
+```
+
+The **Golf booking → Aurora MySQL** dashboard has two rows: the AWS view (CloudWatch, about
+5 minutes behind) and the inside-MySQL view (every 30 seconds). Run the load SQL in the Query
+Editor and watch queries climb, then ACUs and the buffer pool size step up a little later.
+
+If a CloudWatch panel stays empty, search `{__name__=~"aws_rds_.*"}` in Prometheus to see the exact
+metric names YACE produced, and adjust the panel.
+
+### Cost and side effects
+
+- The pods run on the existing nodes, so there's no new compute.
+- CloudWatch charges per metric that YACE fetches, a few cents a day for this list.
+- **mysqld_exporter keeps Aurora awake.** It connects every 30 seconds, so the cluster no longer
+  pauses at 0 ACUs (about 0.5 ACU, roughly $0.07 an hour). Set `enable_mysql_exporter = false`
+  to let it pause again.

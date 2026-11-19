@@ -33,3 +33,9 @@ variable "mysql_engine_version" {
   type        = string
   default     = "8.0.mysql_aurora.3.10.0"
 }
+
+variable "enable_mysql_exporter" {
+  description = "Run mysqld_exporter against Aurora MySQL. Create its MySQL user first (README, Monitoring). It stops the cluster auto-pausing while it runs."
+  type        = bool
+  default     = true
+}

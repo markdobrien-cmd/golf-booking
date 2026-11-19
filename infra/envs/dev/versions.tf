@@ -6,6 +6,16 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.59"
     }
+    # Installs Helm charts into the EKS cluster, the way `helm install` would.
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.3"
+    }
+    # Generates passwords (Grafana admin, MySQL exporter user) so none are written in code.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9"
+    }
   }
 
   # State for this environment lives in the bootstrap bucket under its own key.
@@ -27,6 +37,20 @@ provider "aws" {
       environment = var.environment
       layer       = "env"
       managed-by  = "terraform"
+    }
+  }
+}
+
+# Helm talks to the Kubernetes API. It gets a short-lived token from `aws eks get-token` using
+# whatever AWS login runs Terraform (your SSO profile, or the teardown role in GitHub Actions).
+provider "helm" {
+  kubernetes = {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+    exec = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region]
     }
   }
 }
