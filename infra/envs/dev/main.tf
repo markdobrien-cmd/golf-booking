@@ -12,6 +12,11 @@ module "network" {
 }
 
 # --- EKS cluster ---
+
+data "aws_iam_role" "teardown" {
+  name = "${var.project}-github-env-destroy" # created in infra/bootstrap
+}
+
 # The community module wraps about 30 resources: the cluster, its IAM roles, security groups,
 # add-ons and node groups. We configure it rather than hand-write each piece.
 
@@ -32,6 +37,20 @@ module "eks" {
 
   # Whoever runs `terraform apply` (your SSO role) becomes cluster admin, so no account IDs live in code.
   enable_cluster_creator_admin_permissions = true
+
+  # The nightly teardown must remove the Helm releases (monitoring.tf) through the Kubernetes API
+  # before the cluster goes, so its role needs cluster access too. Read by name: no account ID in code.
+  access_entries = {
+    teardown = {
+      principal_arn = data.aws_iam_role.teardown.arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  }
 
   addons = {
     # Gives every pod a real VPC address. before_compute: it must exist before nodes join.

@@ -1,0 +1,55 @@
+{{- if .Values.loadgen.enabled }}
+# Fake customers. Goes through the web service, like a browser would, so every hop is measured:
+# web -> courses-api, web -> bookings-api -> courses-api, bookings-api -> SQS -> worker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  labels:
+    app.kubernetes.io/name: loadgen
+    {{- include "golf.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: loadgen }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: loadgen, app.kubernetes.io/part-of: golf-booking }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+      containers:
+        - name: loadgen
+          image: curlimages/curl:8.11.1
+          resources: { requests: { cpu: 10m, memory: 16Mi }, limits: { memory: 64Mi } }
+          command: [/bin/sh, -c]
+          args:
+            - |
+              base=http://web:{{ .Values.services.web.port }}
+              n=0
+              while true; do
+                n=$((n + 1))
+                course=$((n % 3 + 1))
+                day=$(date -u -d "@$(( $(date +%s) + 86400 * (n % 30 + 1) ))" +%F 2>/dev/null || date -u +%F)
+                # A tee time that exists on every course: on the hour, or :30 for Hollybrook (12-minute slots).
+                hour=$(( (n / 3) % 8 + 8 ))
+                if [ "$course" -eq 2 ]; then min=30; else min=00; fi
+                tee=$(printf '%02d:%s' "$hour" "$min")
+                curl -s -o /dev/null "$base/api/courses"
+                curl -s -o /dev/null "$base/api/courses/$course/tee-times?date=$day"
+                curl -s -o /dev/null "$base/api/bookings/availability?course_id=$course&date=$day"
+                # Every 5th round, book a tee time. Slots fill up over time, so some get "slot full" (409).
+                if [ $((n % 5)) -eq 0 ]; then
+                  curl -s -o /dev/null -X POST "$base/api/bookings" -H 'Content-Type: application/json' \
+                    -d "{\"course_id\": $course, \"date\": \"$day\", \"time\": \"$tee\", \"players\": 2, \"name\": \"Load Test\", \"email\": \"load@example.com\"}"
+                fi
+                # Every 10th round, a mistake a real client might make: an unknown course (404), a bad time (422).
+                if [ $((n % 10)) -eq 0 ]; then
+                  curl -s -o /dev/null "$base/api/courses/999"
+                  curl -s -o /dev/null -X POST "$base/api/bookings" -H 'Content-Type: application/json' \
+                    -d "{\"course_id\": 2, \"date\": \"$day\", \"time\": \"09:00\", \"players\": 1, \"name\": \"Load Test\", \"email\": \"load@example.com\"}"
+                fi
+                sleep {{ .Values.loadgen.intervalSeconds }}
+              done
+{{- end }}

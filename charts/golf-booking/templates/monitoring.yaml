@@ -1,0 +1,76 @@
+{{- if .Values.monitoring.enabled }}
+# Tells Prometheus (kube-prometheus-stack) to scrape every Service labelled golf-booking/metrics,
+# on its "http" port at /metrics. A new service opts in with the label; no Prometheus config edit.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: golf-booking
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      golf-booking/metrics: "true"
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+# Alerts on symptoms customers feel (errors, slowness, stuck bookings), not on causes like CPU.
+# Probe and scrape requests (/healthz, /readyz, /metrics) are left out: they aren't customers.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: golf-booking
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: golf-booking
+      rules:
+        - alert: GolfServiceDown
+          expr: up{namespace="{{ .Release.Namespace }}"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: {{`"{{ $labels.service }}: Prometheus can't scrape {{ $labels.pod }}."`}}
+        - alert: GolfHighErrorRate
+          expr: |
+            sum by (service) (rate(http_requests_total{namespace="{{ .Release.Namespace }}", route!~"/(healthz|readyz|metrics)", status=~"5.."}[5m]))
+              / sum by (service) (rate(http_requests_total{namespace="{{ .Release.Namespace }}", route!~"/(healthz|readyz|metrics)"}[5m])) > 0.05
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: {{`"{{ $labels.service }}: more than 5% of requests are failing."`}}
+        - alert: GolfSlowRequests
+          expr: |
+            histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket{namespace="{{ .Release.Namespace }}", route!~"/(healthz|readyz|metrics)"}[5m]))) > 0.5
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: {{`"{{ $labels.service }}: 95th percentile latency above 500 ms."`}}
+        - alert: GolfNotificationsStalled
+          expr: time() - notifications_last_poll_timestamp_seconds{namespace="{{ .Release.Namespace }}"} > 120
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "The notifications worker hasn't polled the queue for 2 minutes: confirmation emails are stuck."
+        - alert: GolfPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}"}[15m]) > 3
+          labels: { severity: warning }
+          annotations:
+            summary: {{`"{{ $labels.pod }} restarted more than 3 times in 15 minutes."`}}
+---
+# Grafana's sidecar loads any ConfigMap with this label, from any namespace.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: golf-booking-dashboard
+  labels:
+    grafana_dashboard: "1"
+    {{- include "golf.labels" . | nindent 4 }}
+data:
+  golf-booking.json: |
+    {{- .Files.Get "dashboards/golf-booking.json" | nindent 4 }}
+{{- end }}

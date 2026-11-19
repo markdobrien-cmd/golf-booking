@@ -27,3 +27,9 @@ variable "api_allowed_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "app_image_tag" {
+  description = "Git commit SHA of the images to run (CI tags each image with its commit). List them with: aws ecr describe-images --repository-name golf-booking/web --query 'imageDetails[].imageTags' --output text"
+  type        = string
+  default     = "ec3ed242f27631af1945272b2c9dc48db426b2e2" # main after PR #13, the first images CI published
+}

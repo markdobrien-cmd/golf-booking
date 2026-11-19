@@ -16,13 +16,17 @@ def instrument(app: FastAPI) -> None:
     @app.middleware("http")
     async def record(request: Request, call_next):
         start = time.perf_counter()
-        response = await call_next(request)
-        # Label by route template (/api/courses/{course_id}), not raw path, to keep cardinality low.
-        route = request.scope.get("route")
-        path = route.path if route else "unmatched"
-        REQUESTS.labels(request.method, path, response.status_code).inc()
-        LATENCY.labels(request.method, path).observe(time.perf_counter() - start)
-        return response
+        status = 500  # an unhandled exception never returns a response, but the client gets a 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            # Label by route template (/api/courses/{course_id}), not raw path, to keep cardinality low.
+            route = request.scope.get("route")
+            path = route.path if route else "unmatched"
+            REQUESTS.labels(request.method, path, status).inc()
+            LATENCY.labels(request.method, path).observe(time.perf_counter() - start)
 
     @app.get("/metrics", include_in_schema=False)
     def metrics() -> Response:

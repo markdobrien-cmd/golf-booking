@@ -1,0 +1,72 @@
+# One chart for the whole app. Each entry under `services` becomes a Deployment + Service,
+# so adding a fifth service is a few lines here, not a new set of templates.
+
+image:
+  # ECR registry, e.g. 123456789012.dkr.ecr.eu-west-1.amazonaws.com. Set by Terraform; no account ID here.
+  registry: ""
+  # Git commit SHA that CI built and pushed (CI tags every image with its commit).
+  tag: ""
+  pullPolicy: IfNotPresent
+
+services:
+  courses-api:
+    replicas: 2
+    port: 8000
+    metrics: true # expose /metrics to Prometheus through the ServiceMonitor
+    probes: { liveness: /healthz, readiness: /readyz }
+    env:
+      DATABASE_URL: postgresql://courses:courses@postgres:5432/courses
+    resources: { requests: { cpu: 50m, memory: 96Mi }, limits: { memory: 256Mi } }
+
+  bookings-api:
+    replicas: 2
+    port: 8000
+    metrics: true
+    probes: { liveness: /healthz, readiness: /readyz }
+    env:
+      DATABASE_URL: postgresql://bookings:bookings@postgres:5432/bookings
+      COURSES_API_URL: http://courses-api:8000
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/booking-created
+      AWS_ENDPOINT_URL: http://elasticmq:9324
+      AWS_DEFAULT_REGION: eu-west-1
+      AWS_ACCESS_KEY_ID: local     # only for the ElasticMQ stand-in; real SQS will use Pod Identity
+      AWS_SECRET_ACCESS_KEY: local
+    resources: { requests: { cpu: 50m, memory: 96Mi }, limits: { memory: 256Mi } }
+
+  notifications-worker:
+    replicas: 1
+    port: 8080 # metrics only; it has no API
+    metrics: true
+    probes: { liveness: /metrics, readiness: /metrics }
+    env:
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/booking-created
+      AWS_ENDPOINT_URL: http://elasticmq:9324
+      AWS_DEFAULT_REGION: eu-west-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    resources: { requests: { cpu: 20m, memory: 64Mi }, limits: { memory: 192Mi } }
+
+  web:
+    replicas: 1
+    port: 8080
+    metrics: false # nginx static files; no /metrics
+    probes: { liveness: /healthz, readiness: /healthz }
+    # On EKS the ALB will route /api/*; until then nginx proxies it, like in Docker Compose.
+    nginxConfig: true
+    runAsUser: 101 # the nginx-unprivileged image's user; the Python images use 10001
+    resources: { requests: { cpu: 10m, memory: 32Mi }, limits: { memory: 64Mi } }
+
+# Dev-only stand-ins, the same ones Docker Compose uses. In-cluster, no persistent storage:
+# data is gone when the pod restarts. Turn off once Aurora PostgreSQL and SQS exist.
+dev:
+  enabled: true
+  postgresPassword: postgres # dev stand-in only
+
+monitoring:
+  enabled: true   # ServiceMonitor, alert rules and Grafana dashboard (needs kube-prometheus-stack)
+
+# Steady fake traffic so the dashboards have something to show: browses courses, checks
+# availability, books tee times, and hits a few bad URLs so the error panels aren't flat.
+loadgen:
+  enabled: true
+  intervalSeconds: 1
