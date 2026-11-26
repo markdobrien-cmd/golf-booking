@@ -75,13 +75,24 @@
           value_raw: "{'levels15': (2.0, 4.0)}"
         state: present
 
-    - name: Discover services on every host
-      checkmk.general.discovery:
-        host_name: "{{ item }}"
-        state: fix_all
-      loop: "{{ targets }}"
-
-    - name: Activate changes
+    # New hosts only reach the monitoring core once changes are activated, so activate before
+    # asking Checkmk to discover their services, and again afterwards to start monitoring them.
+    - name: Activate the new hosts and rules
       checkmk.general.activation:
         force_foreign_changes: true
+        redirect: true  # wait until the activation has finished
+      run_once: true
+
+    # Bulk mode with a full scan: asks each agent for fresh data. (Single-host discovery of a
+    # brand-new host can leave everything "undecided", because there's no agent data cached yet.)
+    - name: Discover services on every host
+      checkmk.general.discovery:
+        hosts: "{{ targets }}"
+        state: fix_all
+        do_full_scan: true
+
+    - name: Activate the discovered services
+      checkmk.general.activation:
+        force_foreign_changes: true
+        redirect: true  # wait until the activation has finished
       run_once: true
