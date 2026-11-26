@@ -1,0 +1,5 @@
+# Managed by Ansible (05-nagios.yml) from this host's nagios_checks. Nagios can only ask NRPE to
+# run these commands by name; it can't pass arguments (dont_blame_nrpe=0), so thresholds live here.
+{% for check in nagios_checks if check.nrpe %}
+command[{{ check.nrpe }}]={{ check.command if check.command is defined else lab_shared_plugins[check.shared_plugin].command }}
+{% endfor %}

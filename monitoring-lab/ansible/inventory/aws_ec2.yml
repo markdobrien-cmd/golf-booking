@@ -1,0 +1,22 @@
+# Dynamic inventory: the list of servers comes from EC2 tags (set in infra/envs/monlab), not a file.
+# Check it with:  ansible-inventory --graph
+# This is the "source of truth from the estate" idea: adding a server in Terraform with the right
+# tags is all it takes for Ansible, Checkmk and Nagios to pick it up.
+plugin: amazon.aws.aws_ec2
+regions: [eu-west-1]
+filters:
+  tag:project: golf-booking
+  tag:environment: monlab
+  instance-state-name: running
+hostnames:
+  - tag:Name                       # app01, db01, ... (also the name in Checkmk and Nagios)
+compose:
+  ansible_host: public_ip_address  # Ansible connects from your laptop
+  private_ip: private_ip_address   # servers talk to each other inside the VPC
+keyed_groups:
+  - key: tags.monlab_role          # checkmk_server, nagios_server, targets
+    prefix: ""
+    separator: ""
+  - key: tags.monitoring_folder    # folder_app, folder_db
+    prefix: folder
+    separator: "_"

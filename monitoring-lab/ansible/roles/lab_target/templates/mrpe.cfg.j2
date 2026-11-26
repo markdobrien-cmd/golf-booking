@@ -1,0 +1,4 @@
+# Managed by Ansible (lab_target role). One line per check: <service name> <command line>
+{% for name, plugin in lab_shared_plugins.items() if inventory_hostname in plugin.hosts %}
+{{ name }} {{ plugin.command }}
+{% endfor %}

@@ -1,0 +1,20 @@
+# Managed by Ansible (nagios_server role). Replaces Ubuntu's default, which lets any private
+# address in without a login. The AWS security group already limits who can reach port 80.
+ScriptAlias /cgi-bin/nagios4 /usr/lib/cgi-bin/nagios4
+ScriptAlias /nagios4/cgi-bin /usr/lib/cgi-bin/nagios4
+Alias /nagios4/stylesheets /etc/nagios4/stylesheets
+Alias /nagios4 /usr/share/nagios4/htdocs
+
+<DirectoryMatch (/usr/share/nagios4/htdocs|/usr/lib/cgi-bin/nagios4|/etc/nagios4/stylesheets)>
+    Options FollowSymLinks
+    DirectoryIndex index.php index.html
+    AllowOverride None
+    AuthType Basic
+    AuthName "Nagios lab"
+    AuthUserFile /etc/nagios4/htpasswd.users
+    Require valid-user
+</DirectoryMatch>
+
+<Directory /usr/share/nagios4/htdocs>
+    Options +ExecCGI
+</Directory>

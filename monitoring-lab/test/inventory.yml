@@ -1,0 +1,22 @@
+# Same groups as the AWS dynamic inventory, pointing at the test containers.
+all:
+  vars:
+    ansible_connection: community.docker.docker
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+  children:
+    checkmk_server:
+      hosts:
+        monlab-test-cmk-1: { private_ip: cmk }
+    nagios_server:
+      hosts:
+        monlab-test-nagios-1: { private_ip: nagios }
+    targets:
+      hosts:
+        app01: { ansible_host: monlab-test-app01-1, private_ip: app01 }
+        app02: { ansible_host: monlab-test-app02-1, private_ip: app02 }
+        db01: { ansible_host: monlab-test-db01-1, private_ip: db01 }
+    folder_app:
+      hosts: { app01: {}, app02: {} }
+    folder_db:
+      hosts: { db01: {} }

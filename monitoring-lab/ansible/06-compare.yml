@@ -1,0 +1,44 @@
+# Step 6: the parallel-run check. Compares the state of every migrated service in Checkmk and
+# Nagios and fails if any disagree or are missing. Run it daily until a wave has a clean record.
+- name: Compare Checkmk and Nagios
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Make sure the password files exist
+      ansible.builtin.set_fact:
+        _a: "{{ checkmk_api_secret }}"
+        _b: "{{ nagiosadmin_password }}"
+      no_log: true
+
+    - name: Run the comparison
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/../scripts/compare.py"
+          - --checkmk-url
+          - "{{ checkmk_api_url }}"
+          - --site
+          - "{{ checkmk_site }}"
+          - --checkmk-user
+          - "{{ checkmk_api_user }}"
+          - --checkmk-secret-file
+          - "{{ lab_secrets_dir }}/cmkadmin"
+          - --nagios-url
+          - "{{ nagios_url }}"
+          - --nagios-password-file
+          - "{{ lab_secrets_dir }}/nagiosadmin"
+          - --vars-dir
+          - "{{ playbook_dir }}"
+      register: compare
+      changed_when: false
+      failed_when: false
+
+    - name: Show the result
+      ansible.builtin.debug:
+        var: compare.stdout_lines
+
+    - name: Fail if the two systems disagree
+      ansible.builtin.fail:
+        msg: Checkmk and Nagios disagree; see the table above.
+      when: compare.rc != 0

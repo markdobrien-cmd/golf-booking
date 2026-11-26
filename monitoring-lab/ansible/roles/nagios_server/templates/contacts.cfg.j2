@@ -1,0 +1,36 @@
+# Managed by Ansible (nagios_server role). Notifications are {{ 'ON' if nagios_notifications_enabled else 'OFF (parallel run)' }}.
+define contact {
+    contact_name    lab-oncall
+    alias           Lab on-call
+    use             generic-contact
+    email           root@localhost
+}
+
+define contactgroup {
+    contactgroup_name   lab-oncall
+    alias               Lab on-call
+    members             lab-oncall
+}
+
+# One check every minute, alert on the first failure: the same timing as Checkmk's defaults,
+# so the comparison isn't thrown off by Nagios waiting for retries.
+define host {
+    name                    lab-host
+    use                     generic-host
+    check_command           lab_host_alive
+    check_interval          1
+    retry_interval          1
+    max_check_attempts      1
+    contact_groups          lab-oncall
+    register                0
+}
+
+define service {
+    name                    lab-service
+    use                     generic-service
+    check_interval          1
+    retry_interval          1
+    max_check_attempts      1
+    contact_groups          lab-oncall
+    register                0
+}

@@ -1,0 +1,46 @@
+# Container-only preparation: what an EC2 instance has already (python3) or what the official
+# agent role does with systemd (install the agent and listen on 6556).
+- name: Python on the bare containers
+  hosts: nagios_server:targets
+  gather_facts: false
+  tasks:
+    - name: Install python3
+      ansible.builtin.raw: command -v python3 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 >/dev/null)
+      changed_when: false
+
+- name: Checkmk agent without systemd
+  hosts: targets
+  vars_files:
+    - ../ansible/group_vars/all.yml  # this playbook isn't next to it, so load it explicitly
+  tasks:
+    - name: Wait for the Checkmk site
+      ansible.builtin.uri:
+        url: "http://{{ checkmk_private_address }}:{{ checkmk_http_port }}/{{ checkmk_site }}/check_mk/api/1.0/version"
+        headers:
+          Authorization: "Bearer {{ checkmk_api_user }} {{ checkmk_api_secret }}"
+          Accept: application/json
+      register: version
+      until: version.status == 200
+      retries: 60
+      delay: 5
+      run_once: true
+
+    - name: Install socat and curl
+      ansible.builtin.apt:
+        name: [socat, curl]
+        update_cache: true
+
+    - name: Download the agent package from the site
+      ansible.builtin.get_url:
+        url: "http://{{ checkmk_private_address }}:{{ checkmk_http_port }}/{{ checkmk_site }}/check_mk/agents/check-mk-agent_{{ checkmk_version }}-1_all.deb"
+        dest: /tmp/check-mk-agent.deb
+        mode: "0644"
+
+    - name: Install the agent
+      ansible.builtin.apt:
+        deb: /tmp/check-mk-agent.deb
+
+    - name: Serve the agent on 6556
+      # setsid detaches socat from Ansible's session, so it keeps running after the task ends.
+      ansible.builtin.shell: pgrep -x socat || setsid -f socat TCP-LISTEN:6556,reuseaddr,fork EXEC:/usr/bin/check_mk_agent </dev/null >/dev/null 2>&1
+      changed_when: false

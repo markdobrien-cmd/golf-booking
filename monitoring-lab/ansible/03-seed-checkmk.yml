@@ -1,0 +1,87 @@
+# Step 3: build the "existing" Checkmk configuration.
+#
+# At SIG this config was made by hand in the Checkmk GUI over the years. Here Ansible plays the
+# part of those clicks so the lab is repeatable; pretend you inherited it. It has the usual
+# layering: a default in the top folder, an override in a subfolder, and a one-off tweak on a
+# single host that nobody remembers making. Step 4 has to work all of that out.
+- name: Create folders, hosts and rules in Checkmk, then discover and activate
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  module_defaults:
+    group/checkmk.general.checkmk:
+      server_url: "{{ checkmk_api_url }}"
+      site: "{{ checkmk_site }}"
+      api_user: "{{ checkmk_api_user }}"
+      api_secret: "{{ checkmk_api_secret }}"
+  vars:
+    targets: "{{ groups['targets'] }}"
+  tasks:
+    - name: Folders
+      checkmk.general.folder:
+        path: "{{ item.path }}"
+        name: "{{ item.title }}"
+        state: present
+      loop:
+        - { path: /linux, title: Linux servers }
+        - { path: /linux/app, title: Application servers }
+        - { path: /linux/db, title: Database servers }
+
+    - name: Hosts, filed by their monitoring_folder tag
+      checkmk.general.host:
+        name: "{{ item }}"
+        folder: "/linux/{{ hostvars[item].group_names | select('match', '^folder_') | first | regex_replace('^folder_', '') }}"
+        attributes:
+          ipaddress: "{{ hostvars[item].private_ip }}"
+          tag_criticality: "{{ 'prod' if item.startswith('db') else 'test' }}"
+          labels:
+            lab/role: "{{ hostvars[item].group_names | select('match', '^folder_') | first | regex_replace('^folder_', '') }}"
+        state: present
+      loop: "{{ targets }}"
+
+    # Filesystem levels are "used %". The db override is a dictionary rule in a subfolder:
+    # Checkmk evaluates subfolder rules first, and the first rule to set a key wins.
+    - name: Filesystem levels, default for all Linux servers
+      checkmk.general.rule:
+        ruleset: checkgroup_parameters:filesystem
+        rule:
+          location: { folder: /linux, position: bottom }
+          properties: { description: "Default filesystem levels" }
+          conditions: { host_tags: [], host_labels: [], service_labels: [] }
+          value_raw: "{'levels': (80.0, 90.0)}"
+        state: present
+
+    - name: Filesystem levels, relaxed for the database servers
+      checkmk.general.rule:
+        ruleset: checkgroup_parameters:filesystem
+        rule:
+          location: { folder: /linux/db, position: bottom }
+          properties: { description: "DB volumes run full by design" }
+          conditions: { host_tags: [], host_labels: [], service_labels: [] }
+          value_raw: "{'levels': (90.0, 95.0)}"
+        state: present
+
+    - name: CPU load, a one-off tweak on app02
+      checkmk.general.rule:
+        ruleset: checkgroup_parameters:cpu_load
+        rule:
+          location: { folder: /linux, position: top }
+          properties: { description: "Tightened after an incident (nobody remembers which)" }
+          conditions:
+            host_name: { match_on: [app02], operator: one_of }
+            host_tags: []
+            host_labels: []
+            service_labels: []
+          value_raw: "{'levels15': (2.0, 4.0)}"
+        state: present
+
+    - name: Discover services on every host
+      checkmk.general.discovery:
+        host_name: "{{ item }}"
+        state: fix_all
+      loop: "{{ targets }}"
+
+    - name: Activate changes
+      checkmk.general.activation:
+        force_foreign_changes: true
+      run_once: true

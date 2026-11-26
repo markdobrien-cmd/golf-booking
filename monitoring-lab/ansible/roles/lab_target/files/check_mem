@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Nagios plugin: RAM used, as a percentage, the way Checkmk's "Memory" service counts it.
+
+Used = MemTotal - MemAvailable (page cache the kernel can reclaim doesn't count as used).
+Usage: check_mem -w <warn %> -c <crit %>
+"""
+
+import argparse
+import sys
+
+OK, WARNING, CRITICAL, UNKNOWN = 0, 1, 2, 3
+
+
+def read_meminfo(path="/proc/meminfo"):
+    values = {}
+    with open(path) as f:
+        for line in f:
+            key, rest = line.split(":", 1)
+            values[key] = int(rest.split()[0])  # kB
+    return values
+
+
+def evaluate(meminfo, warn, crit):
+    total, available = meminfo["MemTotal"], meminfo["MemAvailable"]
+    used_pct = 100.0 * (total - available) / total
+    perf = f"used={used_pct:.1f}%;{warn};{crit};0;100"
+    text = f"RAM used {used_pct:.1f}% of {total // 1024} MiB"
+    if used_pct >= crit:
+        return CRITICAL, f"CRITICAL - {text} | {perf}"
+    if used_pct >= warn:
+        return WARNING, f"WARNING - {text} | {perf}"
+    return OK, f"OK - {text} | {perf}"
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-w", type=float, default=80.0)
+    parser.add_argument("-c", type=float, default=90.0)
+    args = parser.parse_args()
+    try:
+        code, line = evaluate(read_meminfo(), args.w, args.c)
+    except (OSError, KeyError, ValueError) as exc:
+        code, line = UNKNOWN, f"UNKNOWN - cannot read memory: {exc}"
+    print(line)
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    main()

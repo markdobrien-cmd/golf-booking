@@ -1,0 +1,21 @@
+# Step 2: prepare the monitored hosts for BOTH systems, as in a real parallel run:
+#   - the Checkmk agent (official checkmk.general.agent role), answering on TCP 6556
+#   - NRPE and the standard Nagios plugins, answering on TCP 5666 (commands come in step 5)
+#   - the plugins both systems share (lab_shared_plugins): MRPE for Checkmk, NRPE for Nagios
+- name: Install the Checkmk agent, NRPE and the shared plugins
+  hosts: targets
+  become: true
+  roles:
+    - role: checkmk.general.agent
+      vars:
+        checkmk_agent_version: "{{ checkmk_version }}"
+        checkmk_agent_edition: "{{ checkmk_edition }}"
+        checkmk_agent_server: "{{ checkmk_private_address }}"
+        checkmk_agent_server_port: "{{ checkmk_http_port }}"
+        checkmk_agent_site: "{{ checkmk_site }}"
+        checkmk_agent_user: "{{ checkmk_api_user }}"
+        checkmk_agent_pass: "{{ checkmk_api_secret }}"
+        checkmk_agent_add_host: false         # hosts are created by step 3, like the hand-built estate
+        checkmk_agent_configure_firewall: false
+      when: not lab_containers  # the container test installs the agent itself (no systemd)
+    - role: lab_target

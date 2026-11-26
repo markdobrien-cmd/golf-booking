@@ -1,0 +1,26 @@
+#!/bin/bash
+# Nagios plugin: is the last successful backup recent enough?
+# Usage: check_backup_age -f <marker file> -w <warn hours> -c <crit hours>
+# Exit codes follow the Nagios plugin API: 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN.
+file="" warn=26 crit=48
+while getopts "f:w:c:" opt; do
+  case $opt in
+    f) file=$OPTARG ;;
+    w) warn=$OPTARG ;;
+    c) crit=$OPTARG ;;
+    *) echo "UNKNOWN - usage: $0 -f file -w hours -c hours"; exit 3 ;;
+  esac
+done
+
+if [[ -z $file || ! -e $file ]]; then
+  # The check can't tell, so it says UNKNOWN rather than a false CRITICAL.
+  echo "UNKNOWN - no backup marker at ${file:-<none>}"
+  exit 3
+fi
+
+age_h=$(( ($(date +%s) - $(stat -c %Y "$file")) / 3600 ))
+perf="age=${age_h}h;${warn};${crit};0"
+if (( age_h >= crit )); then echo "CRITICAL - last backup ${age_h}h ago | $perf"; exit 2; fi
+if (( age_h >= warn )); then echo "WARNING - last backup ${age_h}h ago | $perf"; exit 1; fi
+echo "OK - last backup ${age_h}h ago | $perf"
+exit 0

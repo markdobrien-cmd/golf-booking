@@ -1,0 +1,41 @@
+# Settings shared by every playbook. Passwords are generated on first use and kept in .secrets/
+# next to the playbooks (git-ignored), so none are written in code.
+lab_secrets_dir: "{{ playbook_dir }}/.secrets"
+
+checkmk_version: "2.5.0p20"
+checkmk_edition: community
+checkmk_site: lab
+checkmk_http_port: 80
+
+checkmk_server_name: "{{ groups['checkmk_server'] | first }}"
+# Inside the VPC: what the agents and the Nagios server use to reach Checkmk.
+checkmk_private_address: "{{ hostvars[checkmk_server_name].private_ip }}"
+# From your laptop: what Ansible's API calls and the scripts use.
+checkmk_api_url: "http://{{ hostvars[checkmk_server_name].ansible_host }}:{{ checkmk_http_port }}/"
+
+# Lab shortcut: the REST API is called as cmkadmin. In production you'd create a dedicated
+# automation user with only the permissions it needs.
+checkmk_api_user: cmkadmin
+checkmk_api_secret: "{{ lookup('ansible.builtin.password', lab_secrets_dir ~ '/cmkadmin', length=20, chars=['ascii_letters', 'digits']) }}"
+
+nagios_server_name: "{{ groups['nagios_server'] | first }}"
+nagios_private_address: "{{ hostvars[nagios_server_name].private_ip }}"
+nagios_url: "http://{{ hostvars[nagios_server_name].ansible_host }}"
+nagiosadmin_password: "{{ lookup('ansible.builtin.password', lab_secrets_dir ~ '/nagiosadmin', length=20, chars=['ascii_letters', 'digits']) }}"
+
+# Parallel run: Nagios checks everything but pages nobody until a wave is cut over.
+nagios_notifications_enabled: false
+
+# Plugins that both systems run: Checkmk through MRPE, Nagios through NRPE. One definition, so the
+# two can't drift apart. Hosts listed under "hosts" get the check.
+lab_shared_plugins:
+  Backup_age:
+    command: /usr/local/lib/nagios/plugins/check_backup_age -f /var/backups/lab/last_success -w 26 -c 48
+    hosts: [db01]
+
+# Set to true only by the local container test (no systemd there).
+lab_containers: false
+
+# A host's Nagios checks: the ones its folder group shares plus its own exceptions. Both lists are
+# written by step 4 (group_vars/folder_*/nagios.yml and host_vars/*/nagios.yml).
+nagios_checks: "{{ (nagios_group_checks | default([])) + (nagios_host_checks | default([])) }}"
