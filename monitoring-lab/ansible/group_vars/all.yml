@@ -6,6 +6,7 @@ checkmk_version: "2.5.0p20"
 checkmk_edition: community
 checkmk_site: lab
 checkmk_http_port: 80
+checkmk_agent_receiver_port: 8000  # the site's agent receiver, where agents register for TLS
 
 checkmk_server_name: "{{ groups['checkmk_server'] | first }}"
 # Inside the VPC: what the agents and the Nagios server use to reach Checkmk.
