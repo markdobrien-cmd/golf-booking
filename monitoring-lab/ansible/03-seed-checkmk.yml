@@ -83,6 +83,37 @@
         redirect: true  # wait until the activation has finished
       run_once: true
 
+    # Checkmk 2.x agents talk to the server over TLS, but only once they are registered, and a
+    # host can only register after it exists in Checkmk (above). Until then the "Check_MK Agent"
+    # service warns "TLS is not activated on monitored host". The agent role can't do this in
+    # step 2, because the hosts don't exist yet. (Containers run the agent without its controller,
+    # so there's nothing to register there.)
+    - name: See which agents are already registered
+      ansible.builtin.command: cat /var/lib/cmk-agent/registered_connections.json
+      delegate_to: "{{ item }}"
+      become: true
+      loop: "{{ targets }}"
+      register: agent_connections
+      changed_when: false
+      failed_when: agent_connections.rc not in [0, 1]
+      when: not lab_containers
+
+    - name: Register each agent with the server for TLS
+      ansible.builtin.command: >-
+        cmk-agent-ctl register --hostname {{ item.item }}
+        --server {{ checkmk_private_address }}:{{ checkmk_agent_receiver_port }}
+        --site {{ checkmk_site }} --user {{ checkmk_api_user }} --password {{ checkmk_api_secret }}
+        --trust-cert
+      delegate_to: "{{ item.item }}"
+      become: true
+      loop: "{{ agent_connections.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      no_log: true  # the command line carries the API password
+      changed_when: true
+      when:
+        - not lab_containers
+        - checkmk_private_address not in item.stdout | default('')
+
     # Bulk mode with a full scan: asks each agent for fresh data. (Single-host discovery of a
     # brand-new host can leave everything "undecided", because there's no agent data cached yet.)
     - name: Discover services on every host
