@@ -1,0 +1,9 @@
+- name: Restart Apache
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+
+- name: Restart Nagios
+  ansible.builtin.service:
+    name: nagios4
+    state: restarted

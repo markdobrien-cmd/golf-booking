@@ -1,0 +1,64 @@
+- name: Install NRPE and the standard Nagios plugins
+  ansible.builtin.apt:
+    name: [nagios-nrpe-server, monitoring-plugins, python3]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the in-house plugin directory
+  ansible.builtin.file:
+    path: /usr/local/lib/nagios/plugins
+    state: directory
+    mode: "0755"
+
+# check_backup_age: a typical in-house check. check_mem: Checkmk's "Memory" service has no
+# equivalent in the standard plugins, so the migration needs one (see migration/README.md).
+- name: Install the in-house plugins
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /usr/local/lib/nagios/plugins/{{ item }}
+    mode: "0755"
+  loop: [check_backup_age, check_mem]
+
+- name: Create the sample backup marker directory
+  ansible.builtin.file:
+    path: /var/backups/lab
+    state: directory
+    mode: "0755"
+  when: inventory_hostname in lab_shared_plugins.Backup_age.hosts
+
+# Stand-in for a real backup job: marks success every night at 01:00. Make it look stale with
+#   sudo touch -d '-30 hours' /var/backups/lab/last_success
+- name: Schedule the sample nightly "backup"
+  ansible.builtin.cron:
+    name: lab nightly backup marker
+    minute: "0"
+    hour: "1"
+    job: touch /var/backups/lab/last_success
+  when: inventory_hostname in lab_shared_plugins.Backup_age.hosts and not lab_containers
+
+- name: Mark the first backup as done
+  ansible.builtin.command: touch /var/backups/lab/last_success
+  args:
+    creates: /var/backups/lab/last_success
+  when: inventory_hostname in lab_shared_plugins.Backup_age.hosts
+
+# MRPE: the Checkmk agent runs these Nagios-style plugins and reports each as a service.
+- name: Configure MRPE for the Checkmk agent
+  ansible.builtin.template:
+    src: mrpe.cfg.j2
+    dest: /etc/check_mk/mrpe.cfg
+    mode: "0644"
+
+- name: Let only the Nagios server talk to NRPE
+  ansible.builtin.lineinfile:
+    path: /etc/nagios/nrpe.cfg
+    regexp: "^allowed_hosts="
+    line: "allowed_hosts=127.0.0.1,::1,{{ nagios_private_address }}"
+  notify: Restart NRPE
+
+- name: Start NRPE
+  ansible.builtin.service:
+    name: nagios-nrpe-server
+    state: started
+    enabled: "{{ not lab_containers }}"

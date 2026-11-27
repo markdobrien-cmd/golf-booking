@@ -1,0 +1,37 @@
+# Step 4: read the hand-built Checkmk config and write the Nagios equivalent as Ansible variables:
+#   group_vars/folder_*/nagios.yml   checks every host in a Checkmk folder shares
+#   host_vars/<host>/nagios.yml      the exceptions
+#   migration/report.md              what was mapped and where each threshold came from
+#   migration/triage.yml             services with no obvious equivalent: decide, then edit
+# Review the diff (git diff) before step 5, as you would a merge request.
+- name: Export Checkmk config to Ansible variables
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Make sure the Checkmk password file exists
+      ansible.builtin.set_fact:
+        _secret: "{{ checkmk_api_secret }}"
+      no_log: true
+
+    - name: Run the exporter
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/../scripts/export_checkmk.py"
+          - --url
+          - "{{ checkmk_api_url }}"
+          - --site
+          - "{{ checkmk_site }}"
+          - --user
+          - "{{ checkmk_api_user }}"
+          - --secret-file
+          - "{{ lab_secrets_dir }}/cmkadmin"
+          - --out
+          - "{{ playbook_dir }}"
+      register: export
+      changed_when: true
+
+    - name: Show what was written
+      ansible.builtin.debug:
+        var: export.stdout_lines

@@ -1,0 +1,5 @@
+# Extra vars for the container test (they override group_vars/all.yml).
+lab_containers: true
+checkmk_http_port: 5000
+checkmk_api_url: http://localhost:8080/
+nagios_url: http://localhost:8081

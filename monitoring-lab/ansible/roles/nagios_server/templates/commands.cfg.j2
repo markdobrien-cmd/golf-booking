@@ -1,0 +1,19 @@
+# Managed by Ansible (nagios_server role). Do not edit on the server.
+
+# Run a named NRPE command on the host. The thresholds are in the host's NRPE config.
+define command {
+    command_name    lab_nrpe
+    command_line    $USER1$/check_nrpe -H $HOSTADDRESS$ -c $ARG1$
+}
+
+# Ask NRPE for its version: proves the agent answers. Replaces Checkmk's "Check_MK Agent".
+define command {
+    command_name    lab_nrpe_version
+    command_line    $USER1$/check_nrpe -H $HOSTADDRESS$
+}
+
+# Host check: is the NRPE port open? (ICMP would also work on AWS; this works everywhere.)
+define command {
+    command_name    lab_host_alive
+    command_line    $USER1$/check_tcp -H $HOSTADDRESS$ -p 5666 -t 5
+}

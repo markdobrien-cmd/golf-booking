@@ -1,0 +1,13 @@
+# Managed by Ansible (nagios_server role), from each host's nagios_checks. Do not edit on the server.
+{% for host in groups['targets'] | sort %}
+# --- {{ host }} ---
+{% for check in hostvars[host].nagios_checks %}
+define service {
+    host_name           {{ host }}
+    service_description {{ check.name }}
+    use                 lab-service
+    check_command       {{ ('lab_nrpe!' ~ check.nrpe) if check.nrpe else 'lab_nrpe_version' }}
+}
+
+{% endfor %}
+{% endfor %}

@@ -1,0 +1,17 @@
+# Step 1: install Checkmk on the cmk server and create the "lab" site.
+# Uses the official checkmk.general.server role, the way you'd do it in a real estate.
+- name: Install Checkmk and create the site
+  hosts: checkmk_server
+  become: true
+  roles:
+    - role: checkmk.general.server
+      vars:
+        checkmk_server_version: "{{ checkmk_version }}"
+        checkmk_server_edition: "{{ checkmk_edition }}"
+        checkmk_server_configure_firewall: false  # the AWS security group is the firewall
+        checkmk_server_sites:
+          - name: "{{ checkmk_site }}"
+            version: "{{ checkmk_version }}"
+            edition: "{{ checkmk_edition }}"
+            state: started
+            admin_pw: "{{ checkmk_api_secret }}"

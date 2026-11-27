@@ -1,0 +1,76 @@
+- name: Install Nagios, the NRPE client plugin and Apache tools
+  ansible.builtin.apt:
+    name: [nagios4, nagios-nrpe-plugin, monitoring-plugins, apache2-utils]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# --- Web UI: password-protected (Ubuntu's default allows private addresses with no login) ---
+
+- name: Enable the Apache modules the Nagios CGIs need
+  community.general.apache2_module:
+    name: "{{ item }}"
+    state: present
+  loop: [cgid, auth_basic, authn_file, authz_user]
+  notify: Restart Apache
+
+- name: Apache config for Nagios with basic authentication
+  ansible.builtin.template:
+    src: nagios4-cgi.conf.j2
+    dest: /etc/apache2/conf-available/nagios4-cgi.conf
+    mode: "0644"
+  notify: Restart Apache
+
+- name: Set the nagiosadmin password
+  ansible.builtin.shell: |
+    set -e
+    if htpasswd -vb /etc/nagios4/htpasswd.users nagiosadmin "$PW" 2>/dev/null; then echo unchanged; exit 0; fi
+    htpasswd -cbB /etc/nagios4/htpasswd.users nagiosadmin "$PW"
+  environment:
+    PW: "{{ nagiosadmin_password }}"
+  register: htpasswd
+  changed_when: "'unchanged' not in htpasswd.stdout"
+  no_log: true
+
+- name: Turn on CGI authentication
+  ansible.builtin.lineinfile:
+    path: /etc/nagios4/cgi.cfg
+    regexp: "^use_authentication="
+    line: use_authentication=1
+  notify: Restart Apache
+
+# --- Monitoring config, generated from the exported variables ---
+
+- name: Notifications on or off (off for the parallel run)
+  ansible.builtin.lineinfile:
+    path: /etc/nagios4/nagios.cfg
+    regexp: "^enable_notifications="
+    line: "enable_notifications={{ 1 if nagios_notifications_enabled else 0 }}"
+  notify: Restart Nagios
+
+- name: Directory for the generated objects
+  ansible.builtin.file:
+    path: /etc/nagios4/conf.d/lab
+    state: directory
+    mode: "0755"
+
+- name: Generate commands, hosts, hostgroups and services
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/nagios4/conf.d/lab/{{ item }}
+    mode: "0644"
+  loop: [commands.cfg, contacts.cfg, hosts.cfg, services.cfg]
+  notify: Restart Nagios
+
+# Nagios reads its config at start-up and refuses to start on errors, so check first. If this
+# fails, the running Nagios keeps its last good config; fix the variables and run again.
+- name: Validate the Nagios configuration
+  ansible.builtin.command: nagios4 -v /etc/nagios4/nagios.cfg
+  changed_when: false
+
+- name: Start Apache and Nagios
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: "{{ not lab_containers }}"
+  loop: [apache2, nagios4]

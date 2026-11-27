@@ -53,6 +53,8 @@ local/              # Postgres init script and ElasticMQ queue config for Compos
 infra/bootstrap/    # Terraform: state bucket, ECR, GitHub OIDC, budgets (permanent, cheap)
 infra/modules/      # reusable Terraform modules (network)
 infra/envs/dev/     # destroyable environment: network + EKS
+infra/envs/monlab/  # destroyable monitoring lab: five EC2 instances (ADR 0010)
+monitoring-lab/     # Ansible and scripts for the Checkmk-to-Nagios migration lab
 .github/workflows/  # CI (test, build, publish images) and the nightly dev teardown
 docs/adr/           # decision records: why things are the way they are
 ```

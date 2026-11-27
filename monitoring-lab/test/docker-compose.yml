@@ -1,0 +1,24 @@
+# Local stand-in for the AWS lab, used to test the playbooks and scripts without an AWS bill.
+# The Checkmk server is the official container (in AWS, 01-checkmk-server.yml installs it); the
+# others are plain Ubuntu 24.04 containers that Ansible configures like the EC2 instances.
+name: monlab-test
+
+x-ubuntu: &ubuntu
+  image: ubuntu:24.04
+  command: sleep infinity
+  init: true
+
+services:
+  cmk:
+    image: checkmk/check-mk-community:2.5.0p20
+    environment:
+      CMK_SITE_ID: lab
+      CMK_PASSWORD: ${CMK_PASSWORD:?run ./run.sh, which sets it}
+    ports: ["8080:5000"]
+  nagios:
+    <<: *ubuntu
+    hostname: nagios
+    ports: ["8081:80"]
+  app01: { <<: *ubuntu, hostname: app01 }
+  app02: { <<: *ubuntu, hostname: app02 }
+  db01: { <<: *ubuntu, hostname: db01 }

@@ -1,0 +1,25 @@
+# Step 5: build Nagios from the exported variables.
+#   - each target gets the NRPE commands for its checks (Nagios may only run these, by name)
+#   - the Nagios server gets hosts, hostgroups and services generated from the same variables,
+#     is validated with `nagios4 -v`, and only then restarted
+- name: NRPE commands on the targets
+  hosts: targets
+  become: true
+  tasks:
+    - name: Write the NRPE commands for this host's checks
+      ansible.builtin.template:
+        src: roles/lab_target/templates/nrpe-lab.cfg.j2
+        dest: /etc/nagios/nrpe.d/lab.cfg
+        mode: "0644"
+      notify: Restart NRPE
+  handlers:
+    - name: Restart NRPE
+      ansible.builtin.service:
+        name: nagios-nrpe-server
+        state: restarted
+
+- name: Nagios server
+  hosts: nagios_server
+  become: true
+  roles:
+    - nagios_server

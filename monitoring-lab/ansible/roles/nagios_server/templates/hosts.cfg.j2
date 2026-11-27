@@ -1,0 +1,19 @@
+# Managed by Ansible (nagios_server role), from the inventory. Do not edit on the server.
+{% set folders = groups | dict2items | selectattr('key', 'match', '^folder_.') | list %}
+{% for folder in folders %}
+define hostgroup {
+    hostgroup_name  {{ folder.key }}
+    alias           Checkmk folder {{ folder.key | regex_replace('^folder_', '') }}
+}
+
+{% endfor %}
+{% for host in groups['targets'] | sort %}
+define host {
+    host_name       {{ host }}
+    alias           {{ host }}
+    address         {{ hostvars[host].private_ip }}
+    use             lab-host
+    hostgroups      {{ hostvars[host].group_names | select('match', '^folder_.') | join(',') }}
+}
+
+{% endfor %}

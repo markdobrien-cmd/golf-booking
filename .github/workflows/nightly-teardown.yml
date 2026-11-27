@@ -1,6 +1,6 @@
-# Cost brake: every night, destroy the dev environment if anything is still running.
+# Cost brake: every night, destroy the dev environment and the monitoring lab if anything is still running.
 # The bootstrap layer (state bucket, ECR, roles, budgets) is never touched.
-name: Nightly dev teardown
+name: Nightly teardown
 
 on:
   schedule:
@@ -18,22 +18,32 @@ permissions:
 
 jobs:
   destroy:
+    name: Destroy ${{ matrix.env }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # a stuck dev destroy shouldn't leave the lab running, or the other way round
+      matrix:
+        env: [dev, monlab]
     # The AWS role only trusts jobs in this GitHub environment.
     environment: dev-teardown
     timeout-minutes: 45
     defaults:
       run:
-        working-directory: infra/envs/dev
+        working-directory: infra/envs/${{ matrix.env }}
+    env:
+      # The lab's required variables only matter when creating it; destroy just needs them set.
+      # Variables an environment doesn't declare are ignored, so dev is unaffected.
+      TF_VAR_admin_cidr: 192.0.2.1/32
+      TF_VAR_ssh_public_key: unused-at-destroy
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Check the dev environment exists in this commit
+      - name: Check the environment exists in this commit
         id: env
         working-directory: .
         run: |
-          if [ -d infra/envs/dev ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "No infra/envs/dev yet; nothing to do."; fi
+          if [ -d "infra/envs/${{ matrix.env }}" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "No infra/envs/${{ matrix.env }} yet; nothing to do."; fi
 
       - name: Log in to AWS with OIDC (no stored keys)
         if: steps.env.outputs.present == 'true'
@@ -50,7 +60,7 @@ jobs:
           # `terraform state list | wc -l` count below (it never reads 0, so Destroy always runs).
           terraform_wrapper: false
 
-      - name: Connect to the dev state
+      - name: Connect to the environment's state
         if: steps.env.outputs.present == 'true'
         run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
 

@@ -1,0 +1,10 @@
+# ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: checkmk.general   # official Checkmk roles (server, agent) and REST API modules
+    version: 8.6.1
+  - name: amazon.aws        # aws_ec2 dynamic inventory
+    version: 9.5.2
+  - name: community.general # ufw and other helpers the Checkmk roles use
+    version: ">=10.0.0"
+  - name: community.docker  # only for the local container test in ../test
+    version: 5.4.1
